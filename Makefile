@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Iinclude
+CFLAGS = -Iinclude -g -O0
 LDFLAGS = -Llibs -lraylib
 LDLIBS = -lm -lpthread -ldl -lrt
 
