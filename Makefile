@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Iinclude -g -O0
+CFLAGS = -Iinclude -g -O0 -fsanitize=address
 LDFLAGS = -Llibs -lraylib
 LDLIBS = -lm -lpthread -ldl -lrt
 

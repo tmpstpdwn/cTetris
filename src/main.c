@@ -5,11 +5,13 @@
 #define ROWS 20
 #define COLS 15
 
-#define SHAPE_COUNT 5
 #define OFFSETS_COUNT 4
 #define CELL_SIZE 32
 
+#define SHAPE_COUNT 6
+
 enum ShapeType {
+    N,
     O,
     L,
     I,
@@ -31,26 +33,39 @@ struct Shape {
     Color color;
 };
 
-static bool board[ROWS][COLS];
+static enum ShapeType board[ROWS][COLS] = {0};
 
-Vector2 offsets_o[OFFSETS_COUNT] = {{ 0,  0}, { 0,  1}, { 1,  0}, { 1,  1}};
-Vector2 offsets_l[OFFSETS_COUNT] = {{ 0, -1}, { 0,  0}, { 0,  1}, { 1,  1}};
-Vector2 offsets_i[OFFSETS_COUNT] = {{ 0, -1}, { 0,  0}, { 0,  1}, { 0,  2}};
-Vector2 offsets_t[OFFSETS_COUNT] = {{-1,  0}, { 0, -1}, { 0,  0}, { 1,  0}};
-Vector2 offsets_s[OFFSETS_COUNT] = {{ 0,  0}, { 1,  0}, { 0,  1}, {-1,  1}};
+static Vector2 offsets_o[OFFSETS_COUNT] = {{ 0,  0}, { 0,  1}, { 1,  0}, { 1,  1}};
+static Vector2 offsets_l[OFFSETS_COUNT] = {{ 0, -1}, { 0,  0}, { 0,  1}, { 1,  1}};
+static Vector2 offsets_i[OFFSETS_COUNT] = {{ 0, -1}, { 0,  0}, { 0,  1}, { 0,  2}};
+static Vector2 offsets_t[OFFSETS_COUNT] = {{-1,  0}, { 0, -1}, { 0,  0}, { 1,  0}};
+static Vector2 offsets_s[OFFSETS_COUNT] = {{ 0,  0}, { 1,  0}, { 0,  1}, {-1,  1}};
+
+static Vector2 *offsets[SHAPE_COUNT] = {NULL, offsets_o, offsets_l, offsets_i, offsets_t, offsets_s};
+static Color colors[SHAPE_COUNT] = {RAYWHITE, RED, GREEN, BLUE, ORANGE, VIOLET};
 
 struct Shape get_random_shape(void) {
-    static Vector2 *offsets[SHAPE_COUNT] = {offsets_o, offsets_l, offsets_i, offsets_t, offsets_s};
-    static Color colors[SHAPE_COUNT] = {RED, GREEN, BLUE, ORANGE, VIOLET};
-
-    int index = GetRandomValue(0, SHAPE_COUNT - 1);
-
     struct Shape shape;
+    shape.type = GetRandomValue(1, SHAPE_COUNT - 1);
 
-    shape.type = index;
-    memcpy(shape.offsets, offsets[index], sizeof(shape.offsets));
-    shape.pos = (Vector2){5, 5};
-    shape.color = colors[index];
+    memcpy(shape.offsets, offsets[shape.type], sizeof(shape.offsets));
+
+    shape.color = colors[shape.type];
+
+    int y = 0;
+    int x_min = 0; int x_max = 0;
+
+    for (int i = 0; i < OFFSETS_COUNT; i++) {
+        if (shape.offsets[i].y <     y)     y = shape.offsets[i].y;
+        if (shape.offsets[i].x < x_min) x_min = shape.offsets[i].x;
+        if (shape.offsets[i].x > x_max) x_max = shape.offsets[i].x;
+    }
+
+    int d = x_max - x_min;
+    int w = (d < 0)? -d: d;
+
+    shape.pos.y = -y;
+    shape.pos.x = (int)((COLS - w) / 2);
 
     return shape;
 }
@@ -59,15 +74,26 @@ bool shape_collides(struct Shape *shape) {
     for (int i = 0; i < OFFSETS_COUNT; i++) {
         Vector2 offset = shape->offsets[i];
 
-        int next_offset_x = shape->pos.x + offset.x;
-        int next_offset_y = shape->pos.y + offset.y;
+        int x = shape->pos.x + offset.x;
+        int y = shape->pos.y + offset.y;
 
-        if (next_offset_x < 0 || next_offset_x >= COLS) return true;
-        if (next_offset_y < 0 || next_offset_y >= ROWS) return true;
-        if (board[next_offset_y][next_offset_x]) return true;
+        if (x < 0 || x >= COLS) return true;
+        if (y < 0 || y >= ROWS) return true;
+        if (board[y][x] != N) return true;
     }
 
     return false;
+}
+
+struct Shape get_shadow_shape(struct Shape shape) {
+    while (!shape_collides(&shape))
+        shape.pos.y++;
+
+    shape.pos.y--;
+
+    shape.color = LIGHTGRAY;
+
+    return shape;
 }
 
 void rotate_shape(struct Shape *shape) {
@@ -125,17 +151,6 @@ bool drop_shape(struct Shape *shape) {
     return move_status;
 }
 
-void write_shape_to_board(struct Shape *shape) {
-    for (int i = 0; i < OFFSETS_COUNT; i++) {
-        Vector2 offset = shape->offsets[i];
-
-        int x = shape->pos.x + offset.x;
-        int y = shape->pos.y + offset.y;
-
-        board[y][x] = true;
-    }
-}
-
 void draw_shape(struct Shape shape) {
     for (int i = 0; i < OFFSETS_COUNT; i++) {
         struct Vector2 offsets = shape.offsets[i];
@@ -147,17 +162,35 @@ void draw_shape(struct Shape shape) {
     }
 }; 
 
-void draw_board(void) {
+void clear_board(void) {
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
-            if (board[i][j])
-                DrawRectangle(j * CELL_SIZE, i * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
+            board[i][j] = N;
         }
     }
 }
 
-int main(void)
-{
+void write_to_board(struct Shape *shape) {
+    for (int i = 0; i < OFFSETS_COUNT; i++) {
+        Vector2 offset = shape->offsets[i];
+
+        int x = shape->pos.x + offset.x;
+        int y = shape->pos.y + offset.y;
+
+        board[y][x] = shape->type;
+    }
+}
+
+void draw_board(void) {
+    for (int i = 0; i < ROWS; i++) {
+        for (int j = 0; j < COLS; j++) {
+            if (board[i][j] != N)
+                DrawRectangle(j * CELL_SIZE, i * CELL_SIZE, CELL_SIZE, CELL_SIZE, colors[board[i][j]]);
+        }
+    }
+}
+
+int main(void) {
     const int screenWidth = COLS * CELL_SIZE;
     const int screenHeight = ROWS * CELL_SIZE;
 
@@ -166,25 +199,49 @@ int main(void)
     InitWindow(screenWidth, screenHeight, "Tetris");
     SetTargetFPS(60);
 
-    struct Shape curr_shape = get_random_shape();
+    struct Shape curr_shape, shadow_shape;
+
+    bool new_game = true;
 
     while (!WindowShouldClose())
     {
-        float dt = GetFrameTime();
+        if (new_game) {
+            clear_board();
+            curr_shape = get_random_shape();
+            shadow_shape = get_shadow_shape(curr_shape);
+            new_game = false;
+        }
 
-        if (IsKeyPressed(KEY_UP)) move_shape(&curr_shape, UP);
-        if (IsKeyPressed(KEY_LEFT)) move_shape(&curr_shape, LEFT);
-        if (IsKeyPressed(KEY_RIGHT)) move_shape(&curr_shape, RIGHT);
-        if (IsKeyPressed(KEY_SPACE)) curr_shape = get_random_shape();
-        if (IsKeyPressed(KEY_R)) rotate_shape(&curr_shape);
+        if (IsKeyPressed(KEY_UP)) {
+            rotate_shape(&curr_shape);
+            shadow_shape = get_shadow_shape(curr_shape);
+
+        } else if (IsKeyPressed(KEY_DOWN)) {
+            shadow_shape.type = curr_shape.type;
+            curr_shape = shadow_shape;
+
+        } else if (IsKeyPressed(KEY_LEFT)) {
+            move_shape(&curr_shape, LEFT);
+            shadow_shape = get_shadow_shape(curr_shape);
+
+        } else if (IsKeyPressed(KEY_RIGHT)) {
+            move_shape(&curr_shape, RIGHT);
+            shadow_shape = get_shadow_shape(curr_shape);
+        }
 
         if (!drop_shape(&curr_shape)) {
-            write_shape_to_board(&curr_shape);
+            write_to_board(&curr_shape);
+
             curr_shape = get_random_shape();
+            shadow_shape = get_shadow_shape(curr_shape);
+
+            if (shape_collides(&curr_shape))
+                new_game = true;
         }
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
+        draw_shape(shadow_shape);
         draw_shape(curr_shape);
         draw_board();
         EndDrawing();
