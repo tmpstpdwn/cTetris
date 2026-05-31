@@ -1,14 +1,25 @@
 #include "raylib.h"
 #include <time.h>
 #include <string.h>
+#include <stdio.h>
 
 #define ROWS 20
-#define COLS 15
+#define COLS 10
 
 #define OFFSETS_COUNT 4
-#define CELL_SIZE 32
+#define CELL_SIZE 45
 
 #define SHAPE_COUNT 6
+
+#define SHADOW_SHAPE_COLOR (Color){ 42, 42, 42, 255 }
+#define BOARD_BG (Color){ 17, 17, 17, 255 }
+
+#define COLOR_N  (Color){  30,  30,  30, 255 }
+#define COLOR_O  (Color){  93, 202, 165, 255 }
+#define COLOR_L  (Color){ 127, 119, 221, 255 }
+#define COLOR_I  (Color){  55, 138, 221, 255 }
+#define COLOR_T  (Color){ 216,  90,  48, 255 }
+#define COLOR_S  (Color){ 186, 117,  23, 255 }
 
 enum ShapeType {
     N,
@@ -22,7 +33,6 @@ enum ShapeType {
 enum Dir {
     LEFT,
     RIGHT, 
-    UP, 
     DOWN
 };
 
@@ -42,7 +52,7 @@ static Vector2 offsets_t[OFFSETS_COUNT] = {{-1,  0}, { 0, -1}, { 0,  0}, { 1,  0
 static Vector2 offsets_s[OFFSETS_COUNT] = {{ 0,  0}, { 1,  0}, { 0,  1}, {-1,  1}};
 
 static Vector2 *offsets[SHAPE_COUNT] = {NULL, offsets_o, offsets_l, offsets_i, offsets_t, offsets_s};
-static Color colors[SHAPE_COUNT] = {RAYWHITE, RED, GREEN, BLUE, ORANGE, VIOLET};
+static Color colors[SHAPE_COUNT] = {COLOR_N, COLOR_O, COLOR_L, COLOR_I, COLOR_T, COLOR_S};
 
 struct Shape get_random_shape(void) {
     struct Shape shape;
@@ -91,7 +101,7 @@ struct Shape get_shadow_shape(struct Shape shape) {
 
     shape.pos.y--;
 
-    shape.color = LIGHTGRAY;
+    shape.color = SHADOW_SHAPE_COLOR;
 
     return shape;
 }
@@ -119,13 +129,13 @@ bool move_shape(struct Shape *shape, enum Dir dir) {
     struct Shape next_shape = *shape;
 
     switch (dir) {
-        case UP: next_shape.pos.y--;
-            break;
         case DOWN: next_shape.pos.y++;
             break;
         case LEFT: next_shape.pos.x--;
             break;
         case RIGHT: next_shape.pos.x++;
+            break;
+        default:
             break;
     };
 
@@ -137,14 +147,17 @@ bool move_shape(struct Shape *shape, enum Dir dir) {
     return false;
 }
 
-bool drop_shape(struct Shape *shape) {
+bool drop_shape(struct Shape *shape, double timeout) {
     static double last_time = -1;
     if (last_time == -1) last_time = GetTime();
 
     bool move_status = true;
 
-    if (GetTime() - last_time >= 0.5) {
-        move_status = move_shape(shape, DOWN);
+    struct Shape new_shape = *shape;
+    move_status = move_shape(&new_shape, DOWN);
+
+    if (GetTime() - last_time >= timeout) {
+        *shape = new_shape;
         last_time = GetTime();
     }
 
@@ -158,7 +171,7 @@ void draw_shape(struct Shape shape) {
         int x = (shape.pos.x + offsets.x) * CELL_SIZE;
         int y = (shape.pos.y + offsets.y) * CELL_SIZE;
 
-        DrawRectangle(x, y, CELL_SIZE, CELL_SIZE, shape.color);
+        DrawRectangle(x+1, y+1, CELL_SIZE - 2, CELL_SIZE - 2, shape.color);
     }
 }; 
 
@@ -184,8 +197,7 @@ void write_to_board(struct Shape *shape) {
 void draw_board(void) {
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
-            if (board[i][j] != N)
-                DrawRectangle(j * CELL_SIZE, i * CELL_SIZE, CELL_SIZE, CELL_SIZE, colors[board[i][j]]);
+            DrawRectangle(j * CELL_SIZE + 1, i * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2, colors[board[i][j]]);
         }
     }
 }
@@ -197,14 +209,12 @@ int main(void) {
     SetRandomSeed(time(NULL));
 
     InitWindow(screenWidth, screenHeight, "Tetris");
-    SetTargetFPS(60);
 
     struct Shape curr_shape, shadow_shape;
 
     bool new_game = true;
 
-    while (!WindowShouldClose())
-    {
+    while (!WindowShouldClose()) {
         if (new_game) {
             clear_board();
             curr_shape = get_random_shape();
@@ -216,10 +226,6 @@ int main(void) {
             rotate_shape(&curr_shape);
             shadow_shape = get_shadow_shape(curr_shape);
 
-        } else if (IsKeyPressed(KEY_DOWN)) {
-            shadow_shape.type = curr_shape.type;
-            curr_shape = shadow_shape;
-
         } else if (IsKeyPressed(KEY_LEFT)) {
             move_shape(&curr_shape, LEFT);
             shadow_shape = get_shadow_shape(curr_shape);
@@ -227,9 +233,17 @@ int main(void) {
         } else if (IsKeyPressed(KEY_RIGHT)) {
             move_shape(&curr_shape, RIGHT);
             shadow_shape = get_shadow_shape(curr_shape);
+
+        } else if (IsKeyPressed(KEY_SPACE)) { // Hard drop
+            curr_shape = shadow_shape;
+            curr_shape.color = colors[curr_shape.type];
         }
 
-        if (!drop_shape(&curr_shape)) {
+        if (IsKeyDown(KEY_DOWN)) {
+            drop_shape(&curr_shape, 0.1);
+        }
+
+        if (!drop_shape(&curr_shape, 1)) {
             write_to_board(&curr_shape);
 
             curr_shape = get_random_shape();
@@ -240,10 +254,10 @@ int main(void) {
         }
 
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground(BOARD_BG);
+        draw_board();
         draw_shape(shadow_shape);
         draw_shape(curr_shape);
-        draw_board();
         EndDrawing();
     }
 
