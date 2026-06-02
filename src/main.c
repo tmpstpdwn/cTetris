@@ -71,6 +71,8 @@ static Vector2 offsets_z[OFFSETS_COUNT] = {{ 0,  0}, {-1,  0}, { 0,  1}, { 1,  1
 static Vector2 *offsets[SHAPE_COUNT] = {NULL, NULL, offsets_o, offsets_l, offsets_j, offsets_i, offsets_t, offsets_s, offsets_z};
 static Color colors[SHAPE_COUNT] = {COLOR_N, COLOR_X, COLOR_O, COLOR_L, COLOR_J, COLOR_I, COLOR_T, COLOR_S, COLOR_Z};
 
+static double last_move_time[DIR_COUNT];
+
 struct Shape get_random_shape(void) {
     struct Shape shape;
     shape.type = GetRandomValue(2, SHAPE_COUNT - 1);
@@ -142,10 +144,6 @@ bool rotate_shape(struct Shape *shape) {
 }
 
 enum MoveStatus move_shape(struct Shape *shape, enum Dir dir, double timeout) {
-    static double last_time[DIR_COUNT] = {-1, -1, -1};
-
-    if (last_time[dir] == -1) last_time[dir] = GetTime();
-
     struct Shape next_shape = *shape;
 
     switch (dir) {
@@ -160,9 +158,9 @@ enum MoveStatus move_shape(struct Shape *shape, enum Dir dir, double timeout) {
     };
 
     if (!shape_collides(&next_shape)) {
-        if (GetTime() - last_time[dir] >= timeout) {
+        if (last_move_time[dir] == -1 || GetTime() - last_move_time[dir] >= timeout) {
             *shape = next_shape;
-            last_time[dir] = GetTime();
+            last_move_time[dir] = GetTime();
             return MOVED;
         }
         return CAN_MOVE;
@@ -231,6 +229,8 @@ int main(void) {
             curr_shape = get_random_shape();
             shadow_shape = get_shadow_shape(curr_shape);
             new_game = false;
+            last_move_time[LEFT] = last_move_time[RIGHT] =  -1;
+            last_move_time[DOWN] = GetTime();
         }
 
         bool new_move = false;
