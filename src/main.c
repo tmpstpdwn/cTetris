@@ -80,19 +80,14 @@ struct Shape get_random_shape(void) {
     memcpy(shape.offsets, offsets[shape.type], sizeof(shape.offsets));
 
     int y = 0;
-    int x_min = 0; int x_max = 0;
 
     for (int i = 0; i < OFFSETS_COUNT; i++) {
-        if (shape.offsets[i].y <     y)     y = shape.offsets[i].y;
-        if (shape.offsets[i].x < x_min) x_min = shape.offsets[i].x;
-        if (shape.offsets[i].x > x_max) x_max = shape.offsets[i].x;
+        if (shape.offsets[i].y < y)
+            y = shape.offsets[i].y;
     }
 
-    int d = x_max - x_min;
-    int w = (d < 0)? -d: d;
-
     shape.pos.y = -y;
-    shape.pos.x = (int)((COLS - w) / 2);
+    shape.pos.x = (int)(COLS / 2);
 
     return shape;
 }
@@ -207,6 +202,77 @@ void draw_board(void) {
     }
 }
 
+void clear_rows(const struct Shape *shape) {
+    int y_min, y_max;
+    y_min = y_max = 0;
+
+    for (int i = 0; i < OFFSETS_COUNT; i++) {
+        int curr_y =  shape->offsets[i].y;
+        if (curr_y < y_min) y_min = curr_y;
+        else if (curr_y > y_max) y_max = curr_y;
+    }
+
+    int start_row = shape->pos.y + y_max;
+    int end_row = shape->pos.y + y_min;
+
+    for (int row = start_row; row >= end_row; row--) {
+        int occupied_cols = 0;
+        for (int col = 0; col < COLS; col++)
+            if (board[row][col] != N) occupied_cols++;
+        if (occupied_cols == COLS) {
+            for (int col_1 = 0; col_1 < COLS; col_1++)
+                board[row][col_1] = N;
+        }
+    }
+}
+
+void apply_gravity(const struct Shape *shape) {
+    int y_max = 0;
+
+    for (int i = 0; i < OFFSETS_COUNT; i++) {
+        int curr_y =  shape->offsets[i].y;
+        if (curr_y > y_max) y_max = curr_y;
+    }
+
+    int start_row = shape->pos.y + y_max;
+
+    for (int row = start_row; row > 0; row--) {
+        int empty_cols = 0;
+        for (int col = 0; col < COLS; col++)
+            if (board[row][col] == N) empty_cols++;
+
+        if (empty_cols == COLS) {
+            int occupied_row = -1; // next non-empty row.
+            
+            int go_from = row - 1;
+            int go_to = (row - 4 > 0)? row - 4: 0;
+            
+            for (int i = go_from; i >= go_to; i--) {
+                int done = false;
+                for (int j = 0; j < COLS; j++) {
+                    if (board[i][j] != N) {
+                        occupied_row = i;
+                        done = true;
+                        break;
+                    }
+                }
+                if (done) break;
+            }
+
+            if (occupied_row != -1) {
+                for (int col_1 = 0; col_1 < COLS; col_1++) {
+                    board[row][col_1] = board[occupied_row][col_1];
+                    board[occupied_row][col_1] = N;
+                }
+            } else {
+                break;
+            }
+
+        }
+    }
+
+}
+
 int main(void) {
     const int screenWidth = COLS * CELL_SIZE;
     const int screenHeight = ROWS * CELL_SIZE;
@@ -271,6 +337,10 @@ int main(void) {
                 landed = GetTime();
             } else if (GetTime() - landed >= SHAPE_LOCK_DELAY) {
                 write_to_board(&curr_shape);
+
+                clear_rows(&curr_shape);
+                apply_gravity(&curr_shape);
+
                 curr_shape = get_random_shape();
                 shadow_shape = get_shadow_shape(curr_shape);
 
