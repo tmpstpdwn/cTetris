@@ -172,7 +172,12 @@ char get_type(enum ShapeType type) {
     };
 }
 
-bool rotate_shape(struct Shape *shape) {
+enum RotationDir {
+    CLOCKWISE,
+    ANTI_CLOCKWISE
+};
+
+bool rotate_shape(struct Shape *shape, enum RotationDir dir) {
     if (shape->type == O) return true;
 
     struct Shape rotated_shape = *shape;
@@ -180,35 +185,47 @@ bool rotate_shape(struct Shape *shape) {
     for (int i = 0; i < OFFSETS_COUNT; i++) {
         int x = rotated_shape.offsets[i].x;
         int y = rotated_shape.offsets[i].y;
-
-        rotated_shape.offsets[i].x = y;
-        rotated_shape.offsets[i].y = -x;
+        switch (dir) {
+            case CLOCKWISE: 
+                rotated_shape.offsets[i].x = -y;
+                rotated_shape.offsets[i].y = x;
+                break;
+            case ANTI_CLOCKWISE: 
+                rotated_shape.offsets[i].x = y;
+                rotated_shape.offsets[i].y = -x;
+                break;
+        }
     }
 
     struct CollisionStatus status = shape_collides(&rotated_shape);
 
-    if (status.hit == false) {
+    if (!status.hit) {
         *shape = rotated_shape;
         return true;
-    } else {
-        int x = status.offset.x;
-        int y = status.offset.y;
+    }
 
-        if (x != 0)
-            rotated_shape.pos.x -= x;
-        else if (y != 0)
-            rotated_shape.pos.y -= y;
+    int x = status.offset.x;
 
+    if (x != 0) {
+        rotated_shape.pos.x -= x;
         status = shape_collides(&rotated_shape);
-
-        if (status.hit == false) {
+        if (!status.hit) {
             *shape = rotated_shape;
             return true;
-        } else {
-            return false;
         }
-
+        rotated_shape.pos.x += x;
     }
+
+    struct Shape lifted = rotated_shape;
+    for (int lift = 1; lift <= OFFSETS_COUNT; lift++) {
+        lifted.pos.y -= 1;
+        if (!shape_collides(&lifted).hit) {
+            *shape = lifted;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 enum MoveStatus move_shape(struct Shape *shape, enum Dir dir, double timeout) {
@@ -381,11 +398,19 @@ int main(void) {
         bool new_move = false;
 
         if (IsKeyPressed(KEY_UP)) {
-            new_move = new_move || rotate_shape(&curr_shape);
+            new_move = new_move || rotate_shape(&curr_shape, CLOCKWISE);
+        } else if (IsKeyPressed(KEY_Z)) {
+            new_move = new_move || rotate_shape(&curr_shape, ANTI_CLOCKWISE);
         }
 
-        if (IsKeyDown(KEY_LEFT)) {
+        if (IsKeyPressed(KEY_LEFT)) {
+            new_move = new_move || (move_shape(&curr_shape, LEFT, 0) == MOVED);
+        } else if (IsKeyDown(KEY_LEFT)) {
             new_move = new_move || (move_shape(&curr_shape, LEFT, MOVE_TIMEOUT) == MOVED);
+        }
+
+        if (IsKeyPressed(KEY_RIGHT)) {
+            new_move = new_move || (move_shape(&curr_shape, RIGHT, 0) == MOVED);
         } else if (IsKeyDown(KEY_RIGHT)) {
             new_move = new_move || (move_shape(&curr_shape, RIGHT, MOVE_TIMEOUT) == MOVED);
         }
