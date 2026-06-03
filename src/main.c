@@ -37,13 +37,15 @@ enum MoveStatus {
 };
 
 enum ShapeType {
-    N,
-    X,
+    N, // NULL
+    X, // Shadow.
     O,
     L,
+    J,
     I,
     T,
     S,
+    Z
 };
 
 enum Dir {
@@ -56,6 +58,11 @@ struct Shape {
     enum ShapeType type;
     Vector2 offsets[OFFSETS_COUNT];
     Vector2 pos;
+};
+
+struct CollisionStatus {
+    bool hit;
+    Vector2 offset;
 };
 
 static enum ShapeType board[ROWS][COLS] = {0};
@@ -75,7 +82,7 @@ static double last_move_time[DIR_COUNT];
 
 struct Shape get_random_shape(void) {
     struct Shape shape;
-    shape.type = GetRandomValue(2, SHAPE_COUNT - 1);
+    shape.type = GetRandomValue(2, SHAPE_COUNT - 1); // Exclude N & X .
 
     memcpy(shape.offsets, offsets[shape.type], sizeof(shape.offsets));
 
@@ -92,24 +99,31 @@ struct Shape get_random_shape(void) {
     return shape;
 }
 
-bool shape_collides(const struct Shape *shape) {
+struct CollisionStatus shape_collides(const struct Shape *shape) {
+    struct CollisionStatus status = {0};
+
     for (int i = 0; i < OFFSETS_COUNT; i++) {
         Vector2 offset = shape->offsets[i];
 
         int x = shape->pos.x + offset.x;
         int y = shape->pos.y + offset.y;
 
-        if (x < 0 || x >= COLS) return true;
-        if (y < 0 || y >= ROWS) return true;
-        if (board[y][x] != N) return true;
+        if (x < 0 || x >= COLS || y < 0 || y >= ROWS || board[y][x] != N) {
+            status.hit = true;
+            status.offset = offset;
+        }
     }
 
-    return false;
+    return status;
 }
 
 struct Shape get_shadow_shape(struct Shape shape) {
-    while (!shape_collides(&shape))
+    struct CollisionStatus status;
+
+    do {
         shape.pos.y++;
+        status = shape_collides(&shape);
+    } while (status.hit == false);
 
     shape.pos.y--;
 
@@ -118,8 +132,48 @@ struct Shape get_shadow_shape(struct Shape shape) {
     return shape;
 }
 
+char get_type(enum ShapeType type) {
+    switch (type) {
+        case S:
+            return 'S';
+            break;
+
+        case N:
+            return 'N';
+            break;
+
+        case I:
+            return 'I';
+            break;
+
+        case O:
+            return 'O';
+            break;
+
+        case T:
+            return 'T';
+            break;
+
+        case Z:
+            return 'Z';
+            break;
+
+        case L:
+            return 'L';
+            break;
+
+        case J:
+            return 'J';
+            break;
+
+        case X:
+            return 'X';
+            break;
+    };
+}
+
 bool rotate_shape(struct Shape *shape) {
-    if (shape->type == O) return false;
+    if (shape->type == O) return true;
 
     struct Shape rotated_shape = *shape;
 
@@ -131,11 +185,30 @@ bool rotate_shape(struct Shape *shape) {
         rotated_shape.offsets[i].y = -x;
     }
 
-    if (shape_collides(&rotated_shape))
-        return false;
+    struct CollisionStatus status = shape_collides(&rotated_shape);
 
-    *shape = rotated_shape;
-    return true;
+    if (status.hit == false) {
+        *shape = rotated_shape;
+        return true;
+    } else {
+        int x = status.offset.x;
+        int y = status.offset.y;
+
+        if (x != 0)
+            rotated_shape.pos.x -= x;
+        else if (y != 0)
+            rotated_shape.pos.y -= y;
+
+        status = shape_collides(&rotated_shape);
+
+        if (status.hit == false) {
+            *shape = rotated_shape;
+            return true;
+        } else {
+            return false;
+        }
+
+    }
 }
 
 enum MoveStatus move_shape(struct Shape *shape, enum Dir dir, double timeout) {
@@ -152,7 +225,9 @@ enum MoveStatus move_shape(struct Shape *shape, enum Dir dir, double timeout) {
             break;
     };
 
-    if (!shape_collides(&next_shape)) {
+    struct CollisionStatus status = shape_collides(&next_shape);
+
+    if (status.hit == false) {
         if (last_move_time[dir] == -1 || GetTime() - last_move_time[dir] >= timeout) {
             *shape = next_shape;
             last_move_time[dir] = GetTime();
@@ -202,7 +277,8 @@ void draw_board(void) {
     }
 }
 
-void clear_rows(const struct Shape *shape) {
+int clear_rows(const struct Shape *shape) {
+    int rows_cleared = 0;
     int y_min, y_max;
     y_min = y_max = 0;
 
@@ -222,8 +298,11 @@ void clear_rows(const struct Shape *shape) {
         if (occupied_cols == COLS) {
             for (int col_1 = 0; col_1 < COLS; col_1++)
                 board[row][col_1] = N;
+            rows_cleared++;
         }
     }
+
+    return rows_cleared;
 }
 
 void apply_gravity(const struct Shape *shape) {
@@ -332,19 +411,24 @@ int main(void) {
             }
         }
 
-        if (move_shape(&curr_shape, DOWN, DROP_TIMEOUT) == CANT_MOVE) {
+        enum MoveStatus drop_status = move_shape(&curr_shape, DOWN, DROP_TIMEOUT);
+
+        if (drop_status == CANT_MOVE) {
             if (!landed && !hard_drop) {
                 landed = GetTime();
             } else if (GetTime() - landed >= SHAPE_LOCK_DELAY) {
                 write_to_board(&curr_shape);
 
-                clear_rows(&curr_shape);
+                static int rows_cleared = 0;
+                rows_cleared += clear_rows(&curr_shape);
+
                 apply_gravity(&curr_shape);
 
                 curr_shape = get_random_shape();
                 shadow_shape = get_shadow_shape(curr_shape);
 
-                if (shape_collides(&curr_shape))
+                struct CollisionStatus status = shape_collides(&curr_shape);
+                if (status.hit == true)
                     new_game = true;
 
                 landed = 0;
