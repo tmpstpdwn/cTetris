@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#define MAX(a, b) ((a) > (b)? (a): (b))
+
 #define ROWS 20
 #define COLS 10
 #define CELL_SIZE 45
@@ -54,6 +56,11 @@ enum Dir {
     DOWN
 };
 
+enum RotationDir {
+    CLOCKWISE,
+    ANTI_CLOCKWISE
+};
+
 struct Shape {
     enum ShapeType type;
     Vector2 offsets[OFFSETS_COUNT];
@@ -101,16 +108,34 @@ struct Shape get_random_shape(void) {
 
 struct CollisionStatus shape_collides(const struct Shape *shape) {
     struct CollisionStatus status = {0};
+    bool out_of_bounds = false;
+    int worst = 0;
 
     for (int i = 0; i < OFFSETS_COUNT; i++) {
         Vector2 offset = shape->offsets[i];
-
         int x = shape->pos.x + offset.x;
         int y = shape->pos.y + offset.y;
 
-        if (x < 0 || x >= COLS || y < 0 || y >= ROWS || board[y][x] != N) {
+        if (x < 0 || y < 0 || x >= COLS || y >= ROWS) {
+            int dist = 0;
+            if (x < 0)     dist = -x;
+            if (x >= COLS) dist = x - (COLS - 1);
+            if (y < 0)     dist = MAX(dist, -y);
+            if (y >= ROWS) dist = MAX(dist, y - (ROWS - 1));
+
+            if (!out_of_bounds || dist > worst) {
+                worst = dist;
+                status.offset = offset;
+            }
+
             status.hit = true;
-            status.offset = offset;
+            out_of_bounds = true;
+
+        } else if (!out_of_bounds) {
+            if (board[y][x] != N) {
+                status.hit = true;
+                status.offset = offset;
+            }
         }
     }
 
@@ -123,7 +148,7 @@ struct Shape get_shadow_shape(struct Shape shape) {
     do {
         shape.pos.y++;
         status = shape_collides(&shape);
-    } while (status.hit == false);
+    } while (!status.hit);
 
     shape.pos.y--;
 
@@ -131,51 +156,6 @@ struct Shape get_shadow_shape(struct Shape shape) {
 
     return shape;
 }
-
-char get_type(enum ShapeType type) {
-    switch (type) {
-        case S:
-            return 'S';
-            break;
-
-        case N:
-            return 'N';
-            break;
-
-        case I:
-            return 'I';
-            break;
-
-        case O:
-            return 'O';
-            break;
-
-        case T:
-            return 'T';
-            break;
-
-        case Z:
-            return 'Z';
-            break;
-
-        case L:
-            return 'L';
-            break;
-
-        case J:
-            return 'J';
-            break;
-
-        case X:
-            return 'X';
-            break;
-    };
-}
-
-enum RotationDir {
-    CLOCKWISE,
-    ANTI_CLOCKWISE
-};
 
 bool rotate_shape(struct Shape *shape, enum RotationDir dir) {
     if (shape->type == O) return true;
@@ -207,20 +187,21 @@ bool rotate_shape(struct Shape *shape, enum RotationDir dir) {
     int x = status.offset.x;
 
     if (x != 0) {
-        rotated_shape.pos.x -= x;
+        if (x + rotated_shape.pos.x < 0 || x + rotated_shape.pos.x >= COLS) {
+            rotated_shape.pos.x -= x;
+        }
         status = shape_collides(&rotated_shape);
         if (!status.hit) {
             *shape = rotated_shape;
             return true;
         }
-        rotated_shape.pos.x += x;
     }
 
-    struct Shape lifted = rotated_shape;
-    for (int lift = 1; lift <= OFFSETS_COUNT; lift++) {
-        lifted.pos.y -= 1;
-        if (!shape_collides(&lifted).hit) {
-            *shape = lifted;
+    for (int lift = 1; lift < OFFSETS_COUNT; lift++) {
+        rotated_shape.pos.y -= 1;
+        status = shape_collides(&rotated_shape);
+        if (!status.hit) {
+            *shape = rotated_shape;
             return true;
         }
     }
@@ -244,7 +225,7 @@ enum MoveStatus move_shape(struct Shape *shape, enum Dir dir, double timeout) {
 
     struct CollisionStatus status = shape_collides(&next_shape);
 
-    if (status.hit == false) {
+    if (!status.hit) {
         if (last_move_time[dir] == -1 || GetTime() - last_move_time[dir] >= timeout) {
             *shape = next_shape;
             last_move_time[dir] = GetTime();
@@ -265,7 +246,7 @@ void draw_shape(const struct Shape *shape) {
 
         DrawRectangle(x+1, y+1, CELL_SIZE - 2, CELL_SIZE - 2, colors[shape->type]);
     }
-}; 
+}
 
 void clear_board(void) {
     for (int i = 0; i < ROWS; i++) {
@@ -322,7 +303,7 @@ int clear_rows(const struct Shape *shape) {
     return rows_cleared;
 }
 
-void apply_gravity(const struct Shape *shape) {
+void compress_rows(const struct Shape *shape) {
     int y_max = 0;
 
     for (int i = 0; i < OFFSETS_COUNT; i++) {
@@ -447,7 +428,7 @@ int main(void) {
                 static int rows_cleared = 0;
                 rows_cleared += clear_rows(&curr_shape);
 
-                apply_gravity(&curr_shape);
+                compress_rows(&curr_shape);
 
                 curr_shape = get_random_shape();
                 shadow_shape = get_shadow_shape(curr_shape);
@@ -460,7 +441,7 @@ int main(void) {
                 moves_since_landing = 0;
                 hard_drop = false;
             }
-        } else {
+        } else if (drop_status == MOVED) {
             landed = 0;
             moves_since_landing = 0;
         }
