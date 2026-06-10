@@ -58,37 +58,53 @@ struct Shape {
 
 struct CollisionStatus {
   bool hit;
-  Vector2 offset;
+  Vector2 offset; // worst colliding shape offset;
 };
+
+static struct Shape shape_o = {
+    .type = O, .offsets = {{0, 0}, {0, 1}, {1, 0}, {1, 1}}, .pos = {0, 0}};
+
+static struct Shape shape_l = {
+    .type = L, .offsets = {{0, -1}, {0, 0}, {0, 1}, {1, 1}}, .pos = {0, 0}};
+
+static struct Shape shape_i = {
+    .type = I, .offsets = {{0, -1}, {0, 0}, {0, 1}, {0, 2}}, .pos = {0, 0}};
+
+static struct Shape shape_t = {
+    .type = T, .offsets = {{-1, 0}, {0, -1}, {0, 0}, {1, 0}}, .pos = {0, 0}};
+
+static struct Shape shape_s = {
+    .type = S, .offsets = {{0, 0}, {1, 0}, {0, 1}, {-1, 1}}, .pos = {0, 0}};
+
+static struct Shape shape_j = {
+    .type = J, .offsets = {{0, -1}, {0, 0}, {0, 1}, {-1, 1}}, .pos = {0, 0}};
+
+static struct Shape shape_z = {
+    .type = Z, .offsets = {{0, 0}, {-1, 0}, {0, 1}, {1, 1}}, .pos = {0, 0}};
 
 static enum ShapeType board[ROWS][COLS] = {0};
 
-static Vector2 offsets_o[OFFSETS_COUNT] = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
-static Vector2 offsets_l[OFFSETS_COUNT] = {{0, -1}, {0, 0}, {0, 1}, {1, 1}};
-static Vector2 offsets_i[OFFSETS_COUNT] = {{0, -1}, {0, 0}, {0, 1}, {0, 2}};
-static Vector2 offsets_t[OFFSETS_COUNT] = {{-1, 0}, {0, -1}, {0, 0}, {1, 0}};
-static Vector2 offsets_s[OFFSETS_COUNT] = {{0, 0}, {1, 0}, {0, 1}, {-1, 1}};
-static Vector2 offsets_j[OFFSETS_COUNT] = {{0, -1}, {0, 0}, {0, 1}, {-1, 1}};
-static Vector2 offsets_z[OFFSETS_COUNT] = {{0, 0}, {-1, 0}, {0, 1}, {1, 1}};
+static struct Shape *shapes[SHAPE_COUNT] = {
+    [N] = NULL,     [X] = NULL,     [O] = &shape_o,
+    [L] = &shape_l, [J] = &shape_j, [I] = &shape_i,
+    [T] = &shape_t, [S] = &shape_s, [Z] = &shape_z};
 
-static Vector2 *offsets[SHAPE_COUNT] = {NULL,      NULL,      offsets_o,
-                                        offsets_l, offsets_j, offsets_i,
-                                        offsets_t, offsets_s, offsets_z};
-static Color colors[SHAPE_COUNT] = {COLOR_N, COLOR_X, COLOR_O, COLOR_L, COLOR_J,
-                                    COLOR_I, COLOR_T, COLOR_S, COLOR_Z};
-
-static double last_move_time[DIR_COUNT] = {-1, -1, -1};
+static Color colors[SHAPE_COUNT] = {
+    [N] = COLOR_N, [X] = COLOR_X, [O] = COLOR_O, [L] = COLOR_L, [J] = COLOR_J,
+    [I] = COLOR_I, [T] = COLOR_T, [S] = COLOR_S, [Z] = COLOR_Z};
 
 static struct Shape curr_shape, shadow_shape;
 static enum PieceState curr_shape_state;
 static double curr_shape_state_timer;
-static int lock_move_limit, y_max;
+static int lock_move_count, y_max;
+
+static double last_move_time[DIR_COUNT] = {0};
 
 static bool new_game = true;
 static bool hard_drop = false;
 
-static int get_shape_lowest_y(const struct Shape *shape) {
-  int max_y = (int)(shape->pos.y + shape->offsets[0].y);
+static int get_shape_y_max(const struct Shape *shape) {
+  int max_y = 0;
   for (int i = 1; i < OFFSETS_COUNT; i++) {
     int current_y = (int)(shape->pos.y + shape->offsets[i].y);
     if (current_y > max_y) {
@@ -98,21 +114,41 @@ static int get_shape_lowest_y(const struct Shape *shape) {
   return max_y;
 }
 
+static void shuffle_shapes(void) {
+  int index = 2;
+
+  for (int i = 0; i < 7; i++) {
+    int random_selection =
+        GetRandomValue(index, SHAPE_COUNT - 1); // Exclude N & X .
+    struct Shape *shape = shapes[random_selection];
+    shapes[random_selection] = shapes[index];
+    shapes[index] = shape;
+    index++;
+  }
+}
+
 static struct Shape get_random_shape(void) {
+  static bool init = true;
+  static int curr_shape_index = 2;
   struct Shape shape;
-  shape.type = GetRandomValue(2, SHAPE_COUNT - 1); // Exclude N & X .
 
-  memcpy(shape.offsets, offsets[shape.type], sizeof(shape.offsets));
-
-  int y = 0;
-
-  for (int i = 0; i < OFFSETS_COUNT; i++) {
-    if (shape.offsets[i].y < y)
-      y = shape.offsets[i].y;
+  if (init) {
+    init = false;
+    shuffle_shapes();
+    shape = *shapes[curr_shape_index++];
+  } else if (curr_shape_index == SHAPE_COUNT - 1) {
+    shape = *shapes[curr_shape_index];
+    shuffle_shapes();
+    curr_shape_index = 2;
+  } else {
+    shape = *shapes[curr_shape_index++];
   }
 
-  shape.pos.y = -y;
-  shape.pos.x = (int)(COLS / 2);
+  int y = 0;
+  for (int i = 0; i < OFFSETS_COUNT; i++)
+    y = (shape.offsets[i].y < y) ? shape.offsets[i].y : y;
+
+  shape.pos = (Vector2){.y = -y, .x = (int)(COLS / 2)};
 
   return shape;
 }
@@ -229,7 +265,7 @@ static bool move_shape(struct Shape *shape, enum Dir dir, double delay) {
   struct CollisionStatus status = shape_collides(&next_shape);
 
   if (!status.hit) {
-    if (last_move_time[dir] == -1 || GetTime() - last_move_time[dir] >= delay) {
+    if (GetTime() - last_move_time[dir] >= delay) {
       *shape = next_shape;
       last_move_time[dir] = GetTime();
       return true;
@@ -316,35 +352,34 @@ static void game_init(void) {
 
   curr_shape = get_random_shape();
   shadow_shape = get_shadow_shape(curr_shape);
-  y_max = get_shape_lowest_y(&curr_shape);
+  y_max = get_shape_y_max(&curr_shape);
 
   curr_shape_state = STATE_DROPPING;
   curr_shape_state_timer = 0;
-  lock_move_limit = 0;
+  lock_move_count = 0;
 
-  last_move_time[LEFT] = last_move_time[RIGHT] = last_move_time[DOWN] = -1;
+  last_move_time[LEFT] = last_move_time[RIGHT] = last_move_time[DOWN] = 0;
 
   new_game = false;
 }
 
-void handle_input(void) {
-  bool move_shift = false;
-  bool move_rotate = false;
+bool input(void) {
+  bool new_move = false;
 
   if (IsKeyPressed(KEY_UP)) {
-    move_rotate = rotate_shape(&curr_shape, CLOCKWISE);
+    new_move = rotate_shape(&curr_shape, CLOCKWISE);
   } else if (IsKeyPressed(KEY_Z)) {
-    move_rotate = rotate_shape(&curr_shape, ANTI_CLOCKWISE);
+    new_move = rotate_shape(&curr_shape, ANTI_CLOCKWISE);
   }
 
   if (IsKeyPressed(KEY_LEFT)) {
-    move_shift = move_shape(&curr_shape, LEFT, 0);
+    new_move = new_move || move_shape(&curr_shape, LEFT, 0);
   } else if (IsKeyDown(KEY_LEFT)) {
-    move_shift = move_shape(&curr_shape, LEFT, SHIFT_DELAY);
+    new_move = new_move || move_shape(&curr_shape, LEFT, SHIFT_DELAY);
   } else if (IsKeyPressed(KEY_RIGHT)) {
-    move_shift = move_shape(&curr_shape, RIGHT, 0);
+    new_move = new_move || move_shape(&curr_shape, RIGHT, 0);
   } else if (IsKeyDown(KEY_RIGHT)) {
-    move_shift = move_shape(&curr_shape, RIGHT, SHIFT_DELAY);
+    new_move = new_move || move_shape(&curr_shape, RIGHT, SHIFT_DELAY);
   }
 
   if (IsKeyDown(KEY_DOWN)) { // Soft drop
@@ -355,30 +390,41 @@ void handle_input(void) {
     hard_drop = true;
   }
 
-  if (move_rotate || move_shift) {
-    shadow_shape = get_shadow_shape(curr_shape);
-    if (curr_shape_state != STATE_DROPPING) {
-      if (lock_move_limit < MOVES_BEFORE_LOCK - 1) {
-        if (curr_shape_state == STATE_LOCKING) {
-          curr_shape_state_timer = GetTime();
-        }
-        lock_move_limit++;
-      } else {
-        hard_drop = true;
-      }
-    }
-  }
+  return new_move;
 }
 
-void update_state(void) {
+void update(bool new_move) {
   struct Shape down_check = curr_shape;
   down_check.pos.y++;
   bool is_grounded = shape_collides(&down_check).hit;
 
+  if (new_move) {
+    shadow_shape = get_shadow_shape(curr_shape);
+    if (curr_shape_state != STATE_DROPPING) {
+      if (lock_move_count < MOVES_BEFORE_LOCK - 1) {
+        if (curr_shape_state == STATE_LOCKING) {
+          curr_shape_state_timer = GetTime();
+        }
+        lock_move_count++;
+      } else if (is_grounded) {
+        hard_drop = true;
+      } else {
+        curr_shape_state = STATE_DROPPING;
+        curr_shape_state_timer = 0;
+      }
+    }
+  }
+
   if (is_grounded || hard_drop) {
 
-    if (hard_drop || (curr_shape_state == STATE_LOCKING &&
-                      GetTime() - curr_shape_state_timer >= SHAPE_LOCK_DELAY)) {
+    if (curr_shape_state != STATE_LOCKING && !hard_drop) {
+      curr_shape_state = STATE_LOCKING;
+      curr_shape_state_timer = GetTime();
+    }
+
+    // Guarantees either hard drop || STATE_LOCKING
+    else if (hard_drop ||
+             GetTime() - curr_shape_state_timer >= SHAPE_LOCK_DELAY) {
 
       if (hard_drop) {
         enum ShapeType curr_t = curr_shape.type;
@@ -398,15 +444,11 @@ void update_state(void) {
       } else {
         curr_shape_state = STATE_DROPPING;
         curr_shape_state_timer = 0;
-        lock_move_limit = 0;
-        y_max = get_shape_lowest_y(&curr_shape);
+        lock_move_count = 0;
+        y_max = get_shape_y_max(&curr_shape);
       }
     }
 
-    else if (curr_shape_state != STATE_LOCKING) {
-      curr_shape_state = STATE_LOCKING;
-      curr_shape_state_timer = GetTime();
-    }
   }
 
   else {
@@ -430,10 +472,10 @@ void update_state(void) {
     }
   }
 
-  int current_lowest_y = get_shape_lowest_y(&curr_shape);
+  int current_lowest_y = get_shape_y_max(&curr_shape);
   if (current_lowest_y > y_max) {
     y_max = current_lowest_y;
-    lock_move_limit = 0;
+    lock_move_count = 0;
   }
 }
 
@@ -451,8 +493,7 @@ int main(void) {
 
   while (!WindowShouldClose()) {
     game_init();
-    handle_input();
-    update_state();
+    update(input());
     render();
   }
 
