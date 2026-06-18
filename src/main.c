@@ -3,14 +3,17 @@
 #include <stdbool.h>
 #include <time.h>
 
+#include <stdio.h>
+
 #define CELL_SIZE 30
 #define RENDER_W (CELL_SIZE * COLS)
 #define RENDER_H (CELL_SIZE * ROWS)
 
 // Colors
 #define BG (Color){17, 17, 17, 255}
-#define COLOR_N (Color){30, 30, 30, 255}
-#define COLOR_X (Color){42, 42, 42, 255}
+#define EMPTY_GRID_CELL_COLOR (Color){30, 30, 30, 255}
+#define SHADOW_SHAPE_COLOR (Color){42, 42, 42, 255}
+
 #define COLOR_O (Color){93, 202, 165, 255}
 #define COLOR_L (Color){127, 119, 221, 255}
 #define COLOR_I (Color){55, 138, 221, 255}
@@ -38,10 +41,8 @@ static Color piece_color(enum ShapeType t) {
         return COLOR_J;
     case Z:
         return COLOR_Z;
-    case X:
-        return COLOR_X;
     default:
-        return COLOR_N;
+        return EMPTY_GRID_CELL_COLOR;
     }
 }
 
@@ -50,16 +51,14 @@ static void draw_board(void) {
         for (int c = 0; c < COLS; c++)
             DrawRectangle(c * CELL_SIZE + 1, r * CELL_SIZE + 1, CELL_SIZE - 2,
                           CELL_SIZE - 2,
-                          piece_color(ctetris_get_board_cell(r, c)));
+                          piece_color(ctetris_get_grid_cell(r, c)));
 }
 
-static void draw_shape(const struct Shape *shape) {
-    if (!shape)
-        return;
-    struct Coord pos = ctetris_get_pos(shape);
-    Color col = piece_color(ctetris_get_type(shape));
+static void draw_shape(struct Shape shape, bool shadow) {
+    struct Coord pos = shape.pos;
+    Color col = (shadow) ? SHADOW_SHAPE_COLOR : piece_color(shape.type);
     for (int i = 0; i < OFFSETS_COUNT; i++) {
-        struct Coord off = ctetris_get_offset(shape, i);
+        struct Coord off = shape.offsets[i];
         DrawRectangle((pos.x + off.x) * CELL_SIZE + 1,
                       (pos.y + off.y) * CELL_SIZE + 1, CELL_SIZE - 2,
                       CELL_SIZE - 2, col);
@@ -74,50 +73,90 @@ static void ui_init(void) {
 
 static void ui_shutdown(void) { CloseWindow(); }
 
-static void input(void) {
+void input(void) {
     if (IsKeyPressed(KEY_P))
         paused = !paused;
     if (paused)
         return;
 
-    if (IsKeyPressed(KEY_UP))
-        ctetris_rotate_cw();
-    else if (IsKeyPressed(KEY_Z))
-        ctetris_rotate_acw();
+    struct InputState input_state = {0};
 
-    if (IsKeyPressed(KEY_LEFT))
-        ctetris_strafe_left(false);
-    else if (IsKeyDown(KEY_LEFT))
-        ctetris_strafe_left(true);
-    else if (IsKeyPressed(KEY_RIGHT))
-        ctetris_strafe_right(false);
-    else if (IsKeyDown(KEY_RIGHT))
-        ctetris_strafe_right(true);
+    input_state.rotate_cw_pressed = IsKeyPressed(KEY_UP);
+    input_state.rotate_acw_pressed = IsKeyPressed(KEY_Z);
+    input_state.hard_drop_pressed = IsKeyPressed(KEY_SPACE);
 
-    if (IsKeyDown(KEY_DOWN))
-        ctetris_soft_drop();
-    if (IsKeyPressed(KEY_SPACE))
-        ctetris_hard_drop();
+    input_state.strafe_left_pressed = IsKeyPressed(KEY_LEFT);
+    input_state.strafe_right_pressed = IsKeyPressed(KEY_RIGHT);
+
+    input_state.strafe_left_held = IsKeyDown(KEY_LEFT);
+    input_state.strafe_right_held = IsKeyDown(KEY_RIGHT);
+    input_state.soft_drop_held = IsKeyDown(KEY_DOWN);
+
+    ctetris_post_input(input_state);
 }
 
-static bool update(void) {
+const char *ctetris_event_type_str(enum CTetrisEventType type) {
+    switch (type) {
+    case CTETRIS_EVENT_NONE:
+        return "NONE";
+    case CTETRIS_EVENT_NEW_GAME:
+        return "NEW_GAME";
+    case CTETRIS_EVENT_NEW_SHAPE:
+        return "NEW_SHAPE";
+    case CTETRIS_EVENT_HARD_DROP:
+        return "HARD_DROP";
+    case CTETRIS_EVENT_SCORE_UPDATE:
+        return "SCORE_UPDATE";
+    case CTETRIS_EVENT_LINES_UPDATE:
+        return "LINES_UPDATE";
+    case CTETRIS_EVENT_LEVEL_UPDATE:
+        return "LEVEL_UPDATE";
+    case CTETRIS_EVENT_COMBO_UPDATE:
+        return "COMBO_UPDATE";
+    case CTETRIS_EVENT_LOCK_START:
+        return "LOCK_START";
+    case CTETRIS_EVENT_LOCK_CANCEL:
+        return "LOCK_CANCEL";
+    case CTETRIS_EVENT_LOCK_DONE:
+        return "LOCK_DONE";
+    case CTETRIS_EVENT_LINE_CLEAR:
+        return "LINE_CLEAR";
+    case CTETRIS_EVENT_GRID_COMPACT:
+        return "GRID_COMPACT";
+    case CTETRIS_EVENT_GAME_OVER:
+        return "GAME_OVER";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+static void update(void) {
     static double last_time = -1;
     if (last_time < 0)
         last_time = GetTime();
     double now = GetTime();
     double delta = paused ? 0.0 : now - last_time;
     last_time = now;
+
     if (paused)
-        return false;
-    return ctetris_update(delta);
+        return;
+
+    ctetris_update(delta);
+
+    enum CTetrisEventType ev_t;
+    while ((ev_t = ctetris_event_get().type) != CTETRIS_EVENT_NONE) {
+        printf("EV: %s\n", ctetris_event_type_str(ev_t));
+        if (ev_t == CTETRIS_EVENT_GAME_OVER)
+            new_game = true;
+    }
 }
 
 static void render(void) {
     BeginDrawing();
     ClearBackground(BG);
     draw_board();
-    draw_shape(ctetris_get_curr_shadow_shape());
-    draw_shape(ctetris_get_curr_shape());
+    draw_shape(ctetris_get_curr_shadow_shape(), true);
+    draw_shape(ctetris_get_curr_shape(), false);
     EndDrawing();
 }
 
@@ -129,7 +168,7 @@ int main(void) {
             new_game = false;
         }
         input();
-        new_game = update();
+        update();
         render();
     }
     ui_shutdown();
