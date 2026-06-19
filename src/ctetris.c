@@ -1,7 +1,6 @@
 /* [INCLUDES] */
 
 #include <math.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,8 +75,8 @@ static int moves;
 // Event queue
 
 static struct CTetrisEvent event_queue[EVENT_QUEUE_CAP];
-static int eq_head = 0;
-static int eq_tail = 0;
+static int eq_head;
+static int eq_tail;
 
 /* [FN DCL] */
 
@@ -288,6 +287,7 @@ void ctetris_init(void) {
     curr_shape_strafe_timer = TIMER_INACTIVE;
 
     event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_NEW_GAME});
+    event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_NEW_SHAPE});
 }
 
 // Rotation.
