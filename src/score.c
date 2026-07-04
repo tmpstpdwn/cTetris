@@ -9,64 +9,60 @@
 #include <sys/stat.h>
 #endif
 
+#define APP_DIR_NAME "ctetris"
+#define SAVE_FILE_NAME "ctetris.hs"
+
+// Get path to the high score file based on the os.
 static void get_hs_path(char *buf, size_t len) {
 #if defined(_WIN32)
     const char *base = getenv("LOCALAPPDATA");
     if (!base)
         base = ".";
     char dir[512];
-    snprintf(dir, sizeof(dir), "%s\\ctetris", base);
-    CreateDirectoryA(dir, NULL); // no-op if already exists
-    snprintf(buf, len, "%s\\ctetris.hs", dir);
+    snprintf(dir, sizeof(dir), "%s\\%s", base, APP_DIR_NAME);
+    CreateDirectoryA(dir, NULL); // No-op if already exists
+    snprintf(buf, len, "%s\\%s", dir, SAVE_FILE_NAME);
 
-#elif defined(__APPLE__)
-    const char *home = getenv("HOME");
-    if (!home)
-        home = ".";
-    char dir[512];
-    snprintf(dir, sizeof(dir), "%s/Library/Application Support/ctetris", home);
-    mkdir(dir, 0755);
-    snprintf(buf, len, "%s/ctetris.hs", dir);
-
-#else
+#else // On unix like ones.
     const char *xdg = getenv("XDG_DATA_HOME");
     char dir[512];
-    if (xdg && xdg[0])
-        snprintf(dir, sizeof(dir), "%s/ctetris", xdg);
-    else {
+    if (xdg && xdg[0]) {
+        snprintf(dir, sizeof(dir), "%s/%s", xdg, APP_DIR_NAME);
+    } else {
         const char *home = getenv("HOME");
         if (!home)
             home = ".";
-        snprintf(dir, sizeof(dir), "%s/.local/share/ctetris", home);
+        snprintf(dir, sizeof(dir), "%s/.local/share/%s", home, APP_DIR_NAME);
     }
-    mkdir(dir, 0755);
-    snprintf(buf, len, "%s/ctetris.hs", dir);
+    mkdir(dir, 0755); // fails safely if already exists.
+    snprintf(buf, len, "%s/%s", dir, SAVE_FILE_NAME);
 #endif
 }
 
+// Get stored high score value. if not stored return 0.
 uint32_t hs_load(void) {
     char path[512];
     get_hs_path(path, sizeof(path));
     FILE *fp = fopen(path, "rb");
     if (!fp)
         return 0;
-    uint32_t score = 0;
-    if (fread(&score, sizeof(score), 1, fp) != 1)
-        score = 0;
+
+    uint32_t hs = 0;
+    if (fread(&hs, sizeof(hs), 1, fp) != 1)
+        hs = 0;
+
     fclose(fp);
-    return score;
+    return hs;
 }
 
-bool hs_save(uint32_t score) {
-    uint32_t current = hs_load();
-    if (score <= current)
-        return true;
+// Store the give score on to the disk.
+void hs_save(uint32_t score) {
     char path[512];
     get_hs_path(path, sizeof(path));
     FILE *fp = fopen(path, "wb");
     if (!fp)
-        return false;
-    bool ok = fwrite(&score, sizeof(score), 1, fp) == 1;
+        return;
+
+    fwrite(&score, sizeof(score), 1, fp);
     fclose(fp);
-    return ok;
 }
