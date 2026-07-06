@@ -358,16 +358,34 @@ static Font *get_font_from_sz(int font_size) {
 
 /* Animation utilities */
 
-static void anim_set(struct UIAnim *anim, enum UIAnimType type, float speed,
-                     Vector2 from, Vector2 to, enum ColorIndex c_from,
-                     enum ColorIndex c_to) {
-    anim->type = type;
+static void anim_set_none(struct UIAnim *anim) {
+    anim->type = ANIM_NONE;
+    anim->progress = 0.0f;
+    anim->speed = 0.0f;
+}
+
+static void anim_set_lerp(struct UIAnim *anim, float speed,
+                          enum ColorIndex from, enum ColorIndex to) {
+    anim->type = ANIM_LERP;
+    anim->progress = 0.0f;
+    anim->speed = speed;
+    anim->lerp_from = from;
+    anim->lerp_to = to;
+}
+
+static void anim_set_translate(struct UIAnim *anim, float speed, Vector2 from,
+                               Vector2 to) {
+    anim->type = ANIM_TRANSLATE;
     anim->progress = 0.0f;
     anim->speed = speed;
     anim->move_from = from;
     anim->move_to = to;
-    anim->lerp_from = c_from;
-    anim->lerp_to = c_to;
+}
+
+static void anim_set_flash(struct UIAnim *anim, float speed) {
+    anim->type = ANIM_FLASH;
+    anim->progress = 0.0f;
+    anim->speed = speed;
 }
 
 static void anim_update(struct UIAnim *anim, float dt) {
@@ -387,8 +405,7 @@ static void init_ui_grid(void) {
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             ui_grid[r][c].type = N;
-            anim_set(&ui_grid[r][c].anim, ANIM_NONE, 0, Vector2Zero(),
-                     Vector2Zero(), COL_BG, COL_BG);
+            anim_set_none(&ui_grid[r][c].anim);
         }
     }
 }
@@ -440,7 +457,7 @@ static void init_ui_text(struct UIText *ui_text, Font *font, int font_size,
     if (ui_text->font_spacing < 1)
         ui_text->font_spacing = 1;
 
-    ui_text->anim = (struct UIAnim){.type = ANIM_NONE};
+    anim_set_none(&ui_text->anim);
 }
 
 static void init_ui_badge(struct UIBadge *ui_badge, Font *font, int font_size,
@@ -451,8 +468,8 @@ static void init_ui_badge(struct UIBadge *ui_badge, Font *font, int font_size,
     ui_badge->border_col = border_col;
     ui_badge->bg_col = bg_col;
 
-    ui_badge->border_anim = (struct UIAnim){.type = ANIM_NONE};
-    ui_badge->bg_anim = (struct UIAnim){.type = ANIM_NONE};
+    anim_set_none(&ui_badge->border_anim);
+    anim_set_none(&ui_badge->bg_anim);
 
     ui_badge->active = false;
     ui_badge->pad_h = font_size / 2;
@@ -533,14 +550,12 @@ static void update_ui_badge(struct UIBadge *ui_badge, const char *text, int *x,
     }
 
     ui_badge->border_col = border_to;
-    anim_set(&ui_badge->border_anim, ANIM_LERP, BADGE_ANIM_SPEED, Vector2Zero(),
-             Vector2Zero(), border_from, border_to);
+    anim_set_lerp(&ui_badge->border_anim, BADGE_ANIM_SPEED, border_from,
+                  border_to);
     ui_badge->bg_col = bg_to;
-    anim_set(&ui_badge->bg_anim, ANIM_LERP, BADGE_ANIM_SPEED, Vector2Zero(),
-             Vector2Zero(), bg_from, bg_to);
+    anim_set_lerp(&ui_badge->bg_anim, BADGE_ANIM_SPEED, bg_from, bg_to);
     ui_badge->text.color = text_to;
-    anim_set(&ui_badge->text.anim, ANIM_LERP, BADGE_ANIM_SPEED, Vector2Zero(),
-             Vector2Zero(), text_from, text_to);
+    anim_set_lerp(&ui_badge->text.anim, BADGE_ANIM_SPEED, text_from, text_to);
 }
 
 static void update_ui_keyinfo(struct UIKeyInfo *key_info, const char *key_text,
@@ -948,8 +963,7 @@ static void trail_set(struct Shape shape, struct Coord from, struct Coord to) {
     }
 
     // Setting animation.
-    anim_set(&trail_anim, ANIM_LERP, TRAIL_ANIM_SPEED, Vector2Zero(),
-             Vector2Zero(), COL_SHADOW, COL_SHADOW);
+    anim_set_lerp(&trail_anim, TRAIL_ANIM_SPEED, COL_SHADOW, COL_SHADOW);
 }
 
 static void draw_trail(float dt) {
@@ -975,16 +989,17 @@ static bool handle_event(struct CTetrisEvent ev) {
 
     case CTETRIS_EVENT_LINE_MOVE:
         for (int i = 0; i < ev.data.line_ev.lines; i++) {
-            int src = ev.data.line_ev.info[i].from;
-            int dst = ev.data.line_ev.info[i].to;
+            int src = ev.data.line_ev.info[i].x;
+            int dst = ev.data.line_ev.info[i].y;
 
             for (int c = 0; c < COLS; c++) {
                 if (ui_grid[src][c].type == N)
                     continue;
                 ui_grid[dst][c] = ui_grid[src][c];
-                anim_set(&ui_grid[dst][c].anim, ANIM_TRANSLATE, LINE_MOVE_SPEED,
-                         (Vector2){0.0f, (float)((src - dst) * CELL_S)},
-                         (Vector2){0.0f, 0.0f}, 0, 0);
+                anim_set_translate(
+                    &ui_grid[dst][c].anim, LINE_MOVE_SPEED,
+                    (Vector2){0.0f, (float)((src - dst) * CELL_S)},
+                    (Vector2){0.0f, 0.0f});
                 ui_grid[src][c].type = N;
             }
         }
@@ -992,11 +1007,10 @@ static bool handle_event(struct CTetrisEvent ev) {
 
     case CTETRIS_EVENT_LINE_CLEAR:
         for (int i = 0; i < ev.data.line_ev.lines; i++) {
-            int row = ev.data.line_ev.info[i].from;
+            int row = ev.data.line_ev.info[i].x;
             for (int c = 0; c < COLS; c++) {
-                anim_set(&ui_grid[row][c].anim, ANIM_LERP, FADE_OUT_SPEED,
-                         Vector2Zero(), Vector2Zero(),
-                         piece_color(ui_grid[row][c].type), COL_BG_ALT);
+                anim_set_lerp(&ui_grid[row][c].anim, FADE_OUT_SPEED,
+                              piece_color(ui_grid[row][c].type), COL_BG_ALT);
                 ui_grid[row][c].type = N;
             }
         }
@@ -1034,24 +1048,19 @@ static bool handle_event(struct CTetrisEvent ev) {
     }
 
     case CTETRIS_EVENT_LOCK_CANCEL:
-        anim_set(&player_active_shape.anim, ANIM_NONE, 0, Vector2Zero(),
-                 Vector2Zero(), COL_BG, COL_BG);
+        anim_set_none(&player_active_shape.anim);
         break;
 
     case CTETRIS_EVENT_LOCK_START:
     case CTETRIS_EVENT_LOCK_RESET:
-        anim_set(&player_active_shape.anim, ANIM_LERP, LOCK_FADE_SPEED,
-                 Vector2Zero(), Vector2Zero(),
-                 piece_color(player_active_shape.shape.type), COL_SHADOW);
+        anim_set_lerp(&player_active_shape.anim, LOCK_FADE_SPEED,
+                      piece_color(player_active_shape.shape.type), COL_SHADOW);
         break;
 
     case CTETRIS_EVENT_LOCK_DONE:
         if (!audio_muted)
             PlaySound(sfx_click);
-        anim_set(&player_active_shape.anim, ANIM_FLASH, FLASH_SPEED,
-                 Vector2Zero(), Vector2Zero(),
-                 piece_color(player_active_shape.shape.type),
-                 piece_color(player_active_shape.shape.type));
+        anim_set_flash(&player_active_shape.anim, FLASH_SPEED);
         write_to_ui_grid(player_active_shape.shape);
         return false; // Engine blocked for animation.
 
@@ -1063,7 +1072,7 @@ static bool handle_event(struct CTetrisEvent ev) {
         return false; // Engine blocked for animation.
 
     case CTETRIS_EVENT_SOFT_DROP:
-    case CTETRIS_EVENT_STRAFE:
+    case CTETRIS_EVENT_SHIFT:
     case CTETRIS_EVENT_ROTATE:
         if (!audio_muted)
             PlaySound(sfx_clack);
@@ -1073,9 +1082,8 @@ static bool handle_event(struct CTetrisEvent ev) {
         player_active_shape.shape = ev.data.shape;
         if (!curr_shape_exists) {
             // Fade in animation for new active shape.
-            anim_set(&player_active_shape.anim, ANIM_LERP, FADE_IN_SPEED,
-                     Vector2Zero(), Vector2Zero(), COL_BG_ALT,
-                     piece_color(ev.data.shape.type));
+            anim_set_lerp(&player_active_shape.anim, FADE_IN_SPEED, COL_BG_ALT,
+                          piece_color(ev.data.shape.type));
             curr_shape_exists = true;
         }
         break;
@@ -1084,8 +1092,8 @@ static bool handle_event(struct CTetrisEvent ev) {
         player_shadow_shape.shape = ev.data.shape;
         if (!curr_shadow_exists) {
             // Fade in animation for new shadow shape.
-            anim_set(&player_shadow_shape.anim, ANIM_LERP, FADE_IN_SPEED,
-                     Vector2Zero(), Vector2Zero(), COL_BG_ALT, COL_SHADOW);
+            anim_set_lerp(&player_shadow_shape.anim, FADE_IN_SPEED, COL_BG_ALT,
+                          COL_SHADOW);
             curr_shadow_exists = true;
         }
         break;
@@ -1093,9 +1101,8 @@ static bool handle_event(struct CTetrisEvent ev) {
     case CTETRIS_EVENT_NEXT_SHAPE_UPDATE:
         player_prev_shape.shape = ev.data.shape;
         // Fade in animation for new next shape.
-        anim_set(&player_prev_shape.anim, ANIM_LERP, FADE_IN_SPEED,
-                 Vector2Zero(), Vector2Zero(), COL_BG_ALT,
-                 piece_color(ev.data.shape.type));
+        anim_set_lerp(&player_prev_shape.anim, FADE_IN_SPEED, COL_BG_ALT,
+                      piece_color(ev.data.shape.type));
         break;
 
     default:
@@ -1270,7 +1277,7 @@ static void init_state(void) {
     score = 0;
 
     update_ui_text(&txt_score, "0", NULL, NULL);
-    update_ui_text(&txt_level, "0", NULL, NULL);
+    update_ui_text(&txt_level, "1", NULL, NULL);
     update_ui_text(&txt_lines, "0", NULL, NULL);
 
     bool combo_state = false;
@@ -1390,20 +1397,20 @@ bool renderer_input(void) {
 
     // Push input to engine.
     struct InputState input_state = {
-        .strafe_left_pressed = IsKeyPressed(KEY_LEFT),
-        .strafe_right_pressed = IsKeyPressed(KEY_RIGHT),
-        .strafe_left_held = IsKeyDown(KEY_LEFT),
-        .strafe_right_held = IsKeyDown(KEY_RIGHT),
+        .shift_left_pressed = IsKeyPressed(KEY_LEFT),
+        .shift_right_pressed = IsKeyPressed(KEY_RIGHT),
+        .shift_left_held = IsKeyDown(KEY_LEFT),
+        .shift_right_held = IsKeyDown(KEY_RIGHT),
         .soft_drop_held = IsKeyDown(KEY_DOWN),
         .rotate_cw_pressed = IsKeyPressed(KEY_UP),
-        .rotate_acw_pressed = IsKeyPressed(KEY_Z),
+        .rotate_ccw_pressed = IsKeyPressed(KEY_Z),
         .hard_drop_pressed = IsKeyPressed(KEY_SPACE),
     };
     ctetris_input_push(input_state);
 
-    bool left = input_state.strafe_left_pressed || input_state.strafe_left_held;
+    bool left = input_state.shift_left_pressed || input_state.shift_left_held;
     bool right =
-        input_state.strafe_right_pressed || input_state.strafe_right_held;
+        input_state.shift_right_pressed || input_state.shift_right_held;
 
     update_ui_badge(&keybindings[KB_HARD_DROP].badge, NULL, NULL, NULL,
                     &input_state.hard_drop_pressed);
@@ -1420,7 +1427,7 @@ bool renderer_input(void) {
                     &input_state.rotate_cw_pressed);
 
     update_ui_badge(&keybindings[KB_ROTATE_ACW].badge, NULL, NULL, NULL,
-                    &input_state.rotate_acw_pressed);
+                    &input_state.rotate_ccw_pressed);
 
     return true;
 }

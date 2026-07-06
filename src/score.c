@@ -1,3 +1,5 @@
+/* [ INCLUDES ] */
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,11 +11,15 @@
 #include <sys/stat.h>
 #endif
 
+/* [ DEFINES ] */
+
 #define APP_DIR_NAME "ctetris"
 #define SAVE_FILE_NAME "ctetris.hs"
 
-// Get path to the high score file based on the os.
-static void get_hs_path(char *buf, size_t len) {
+/* [ FN DEF ] */
+
+// Get path to the score file based on the os.
+static void get_score_path(char *buf, size_t len) {
 #if defined(_WIN32)
     const char *base = getenv("LOCALAPPDATA");
     if (!base)
@@ -39,10 +45,11 @@ static void get_hs_path(char *buf, size_t len) {
 #endif
 }
 
-// Get stored high score value. if not stored return 0.
-uint32_t hs_load(void) {
+// Return saved score.
+// If not saved previously return 0.
+uint32_t score_load(void) {
     char path[512];
-    get_hs_path(path, sizeof(path));
+    get_score_path(path, sizeof(path));
     FILE *fp = fopen(path, "rb");
     if (!fp)
         return 0;
@@ -55,10 +62,10 @@ uint32_t hs_load(void) {
     return hs;
 }
 
-// Store the give score on to the disk.
-void hs_save(uint32_t score) {
+// Save the given score on to the disk.
+void score_save(uint32_t score) {
     char path[512];
-    get_hs_path(path, sizeof(path));
+    get_score_path(path, sizeof(path));
     FILE *fp = fopen(path, "wb");
     if (!fp)
         return;
@@ -66,3 +73,5 @@ void hs_save(uint32_t score) {
     fwrite(&score, sizeof(score), 1, fp);
     fclose(fp);
 }
+
+/* [ END ] */

@@ -7,7 +7,6 @@
 /* [ INCLUDES ] */
 
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -16,22 +15,23 @@
 
 /* [ DEFINES ] */
 
-#define SOFT_DROP_DELAY 0.05f // Accelerated fall delay interval.
+#define SOFT_DROP_DELAY 0.05f // Drop delay (seconds).
 
-#define SHIFT_DELAY_INITIAL 0.2f // Time before auto-repeat kicks in
-#define SHIFT_DELAY_REPEAT 0.1f  // Speed of shifting once held down
+#define SHIFT_DELAY_INITIAL 0.2f // Delay before auto-repeat kicks in (seconds).
+#define SHIFT_DELAY_REPEAT 0.1f  // Delay for shift auto-repeat (seconds).
 
-// Number of moves allowed after a piece has landed before it is automatically
+// Number of moves allowed after a shape has landed before it is automatically
 // hard dropped and locked.
 #define MOVES_BEFORE_LOCK 15
-#define SHAPE_LOCK_DELAY 0.5f // Lock timer duration in seconds.
+
+#define SHAPE_LOCK_DELAY 0.5f // Lock timer duration (seconds).
 
 // Score bonus multiplier for maintaining a consecutive line clear chain.
 #define COMBO_BONUS 50
 
-#define TIMER_INACTIVE (-1.0) // timer wont be incremented.
 // All non `TIMER_INACTIVE` timers will be incremented.
-#define TIMER_START (0.0) // resets the timer.
+#define TIMER_INACTIVE (-1.0) // Timer won't be incremented.
+#define TIMER_START (0.0)     // resets the timer.
 
 #define EVENT_QUEUE_CAP 32
 
@@ -39,7 +39,7 @@
 
 enum EngineState { STATE_DROPPING, STATE_LOCKING };
 enum MovementDir { LEFT, RIGHT, DOWN };
-enum RotationDir { CLOCKWISE, ANTI_CLOCKWISE };
+enum RotationDir { CLOCKWISE, COUNTER_CLOCKWISE };
 
 struct FrameContext {
     bool hard_drop;
@@ -54,9 +54,9 @@ struct CollisionStatus {
 
 /* [ VARIABLES ] */
 
-// standard Tetris piece coordinate definitions.
+// standard Tetris shape coordinate definitions.
 // (0, 0) is the pivot.
-// A shapes position corresponds to where the pivot is on the grid.
+// A shape's position corresponds to where the pivot is on the grid.
 static struct Shape SHAPE_O = {
     .type = O, .offsets = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}, .pos = {0, 0}};
 static struct Shape SHAPE_L = {
@@ -72,18 +72,18 @@ static struct Shape SHAPE_J = {
 static struct Shape SHAPE_Z = {
     .type = Z, .offsets = {{-1, 0}, {0, 0}, {0, 1}, {1, 1}}, .pos = {0, 0}};
 
-// Shape bog of 7.
-static struct Shape *shapes[N] = {
+// Shape bag of 7.
+static struct Shape *shape_bag[N] = {
     [O] = &SHAPE_O, [L] = &SHAPE_L, [J] = &SHAPE_J, [I] = &SHAPE_I,
     [T] = &SHAPE_T, [S] = &SHAPE_S, [Z] = &SHAPE_Z};
 
-// Index of the next shape int the shape bag.
-static int next_shape_index = 0;
+// Index of the next shape in the shape bag.
+static int shape_bag_next_i = 0;
 
 // Game state variables
 
 // If the shape is airborne then the `engine_state` will be `STATE_DROPPING`.
-// otherwise `STATE_LOCKING`.
+// Otherwise `STATE_LOCKING`.
 static enum EngineState engine_state;
 static double engine_state_timer; // Timer for the current `engine_state`.
 
@@ -91,7 +91,7 @@ static double engine_state_timer; // Timer for the current `engine_state`.
 static enum ShapeType grid[ROWS][COLS];
 
 static struct Shape curr_shape, shadow_shape;
-static double curr_shape_strafe_timer; // Timer for auto-repeat strafe.
+static double curr_shape_shift_timer; // Timer for auto-repeat shift.
 
 // `y_max` represents the lowest row the current shape has reached.
 static int y_max;
@@ -119,23 +119,23 @@ static int eq_tail;
 static void event_push(struct CTetrisEvent ev);
 
 // Randomization.
-static void shuffle_shapes(void);
-static struct Shape get_random_shape(void);
+static void shape_bag_shuffle(void);
+static struct Shape shape_bag_get_random(void);
 
 // Shape utilities.
 static int get_shape_y_max(const struct Shape *shape);
 static struct CollisionStatus shape_collides(const struct Shape *shape);
 static bool is_shape_grounded(const struct Shape *shape);
-static struct Shape get_shadow_shape(struct Shape shape);
+static struct Shape get_shadow_shape(struct Shape *shape);
 static bool rotate_shape(struct Shape *shape, enum RotationDir dir);
 static bool move_shape(struct Shape *shape, enum MovementDir dir,
                        double last_move_timer, double delay);
 
-// Grid / Engine state modifiers. Core stuff.
+// Core.
 static void process_input_buffer(struct FrameContext *ctxt);
 
 static bool curr_shape_rotate(enum RotationDir dir);
-static bool curr_shape_strafe(enum MovementDir dir, bool delay);
+static bool curr_shape_shift(enum MovementDir dir, bool delay);
 static void handle_new_move(struct FrameContext *ctxt);
 
 static double get_drop_delay(bool soft_drop);
@@ -155,15 +155,15 @@ static void endgame_or_reset(void);
 void ctetris_init(void) {
     srand((unsigned)time(NULL));
 
-    // pretty much just setting core variables to valid values for starting a
+    // Pretty much just setting core variables to valid starting values for a
     // new game.
     eq_head = eq_tail = 0;
 
     clear_grid();
-    shuffle_shapes();
+    shape_bag_shuffle();
 
-    curr_shape = get_random_shape();
-    shadow_shape = get_shadow_shape(curr_shape);
+    curr_shape = shape_bag_get_random();
+    shadow_shape = get_shadow_shape(&curr_shape);
     y_max = get_shape_y_max(&curr_shape);
 
     engine_state = STATE_DROPPING;
@@ -174,7 +174,7 @@ void ctetris_init(void) {
     score = combo = lines = 0;
     level = 1;
 
-    curr_shape_strafe_timer = TIMER_INACTIVE;
+    curr_shape_shift_timer = TIMER_INACTIVE;
 
     memset(&input_buffer, 0, sizeof(struct InputState));
 
@@ -183,8 +183,9 @@ void ctetris_init(void) {
                                      .data.shape = curr_shape});
     event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SHADOW_SHAPE_UPDATE,
                                      .data.shape = shadow_shape});
-    event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_NEXT_SHAPE_UPDATE,
-                                     .data.shape = *shapes[next_shape_index]});
+    event_push(
+        (struct CTetrisEvent){.type = CTETRIS_EVENT_NEXT_SHAPE_UPDATE,
+                              .data.shape = *shape_bag[shape_bag_next_i]});
 }
 
 void ctetris_input_push(struct InputState input_state) {
@@ -195,8 +196,8 @@ void ctetris_update(double delta) {
     // Increment active timers.
     if (engine_state_timer != TIMER_INACTIVE)
         engine_state_timer += delta;
-    if (curr_shape_strafe_timer != TIMER_INACTIVE)
-        curr_shape_strafe_timer += delta;
+    if (curr_shape_shift_timer != TIMER_INACTIVE)
+        curr_shape_shift_timer += delta;
 
     struct FrameContext ctxt = {0};
 
@@ -206,13 +207,14 @@ void ctetris_update(double delta) {
     // In case there are new moves.
     handle_new_move(&ctxt);
 
-    // Handle shape based on whether it is grounded or ariborne.
+    // In case the shape is grounded.
     if (!handle_grounded_shape(ctxt.hard_drop))
+        // If it is airborne.
         handle_airborne_shape(ctxt.soft_drop);
 }
 
 struct CTetrisEvent ctetris_event_pop(void) {
-    // If the queue is empty? return `CTETRIS_EVENT_NONE`.
+    // If the queue is empty, return `CTETRIS_EVENT_NONE`.
     if (eq_head == eq_tail)
         return (struct CTetrisEvent){.type = CTETRIS_EVENT_NONE};
     struct CTetrisEvent ev = event_queue[eq_head];
@@ -226,7 +228,7 @@ struct CTetrisEvent ctetris_event_pop(void) {
 static void event_push(struct CTetrisEvent ev) {
     int next = (eq_tail + 1) % EVENT_QUEUE_CAP;
     if (next == eq_head)
-        return; // When the queue overflows, just dont push.
+        return; // When the queue overflows, just don't push.
     event_queue[eq_tail] = ev;
     eq_tail = next;
 }
@@ -242,30 +244,30 @@ static int get_shape_y_max(const struct Shape *shape) {
     return max_y;
 }
 
-// Shuffle the shapes bag.
-static void shuffle_shapes(void) {
+// Shuffle the shape bag.
+static void shape_bag_shuffle(void) {
     for (int i = 6; i > 0; i--) {
         int j = rand() % (i + 1);
-        struct Shape *tmp = shapes[i];
-        shapes[i] = shapes[j];
-        shapes[j] = tmp;
+        struct Shape *tmp = shape_bag[i];
+        shape_bag[i] = shape_bag[j];
+        shape_bag[j] = tmp;
     }
-    next_shape_index = 0;
+    shape_bag_next_i = 0;
 }
 
-// Get a random shape from the shapes bag.
-static struct Shape get_random_shape(void) {
+// Get a random shape from the shape bag.
+static struct Shape shape_bag_get_random(void) {
     struct Shape shape;
 
-    if (next_shape_index == N - 1) {
+    if (shape_bag_next_i == N - 1) {
         // In case on the last index then return it and then shuffle the bag.
-        shape = *shapes[next_shape_index];
-        shuffle_shapes();
+        shape = *shape_bag[shape_bag_next_i];
+        shape_bag_shuffle();
     } else {
-        shape = *shapes[next_shape_index++];
+        shape = *shape_bag[shape_bag_next_i++];
     }
 
-    // Compute the shape's sharting position so that it is horizontally centered
+    // Compute the shape's starting position so that it is horizontally centered
     // and vertically in the first 2 rows.
     int y = 0;
     for (int i = 0; i < OFFSETS_COUNT; i++)
@@ -276,7 +278,7 @@ static struct Shape get_random_shape(void) {
 }
 
 // Takes in a shape and returns if the shape is in active collision or not.
-// being out of bounds is also considered as collision and is given more
+// Being out of bounds is also considered as collision and is given more
 // priority than in bounds collision.
 // In case if there is a collision then this fn returns a `struct
 // CollisionStatus` including a worst colliding offset.
@@ -329,12 +331,14 @@ static bool is_shape_grounded(const struct Shape *shape) {
 }
 
 // Returns a shadow shape for the given shape.
-static struct Shape get_shadow_shape(struct Shape shape) {
+static struct Shape get_shadow_shape(struct Shape *shape) {
     int max_drop = ROWS;
 
+    struct Shape shadow_shape = *shape;
+
     for (int i = 0; i < OFFSETS_COUNT; i++) {
-        int x = shape.pos.x + shape.offsets[i].x;
-        int y = shape.pos.y + shape.offsets[i].y;
+        int x = shape->pos.x + shape->offsets[i].x;
+        int y = shape->pos.y + shape->offsets[i].y;
 
         int dist = 0;
         for (int check_y = y + 1; check_y < ROWS; check_y++) {
@@ -348,8 +352,8 @@ static struct Shape get_shadow_shape(struct Shape shape) {
         }
     }
 
-    shape.pos.y += max_drop;
-    return shape;
+    shadow_shape.pos.y += max_drop;
+    return shadow_shape;
 }
 
 // Executes a geometric rotation of the given shape in the specified direction.
@@ -374,7 +378,7 @@ static bool rotate_shape(struct Shape *shape, enum RotationDir dir) {
             rotated.offsets[i].x = -y;
             rotated.offsets[i].y = x;
             break;
-        case ANTI_CLOCKWISE:
+        case COUNTER_CLOCKWISE:
             rotated.offsets[i].x = y;
             rotated.offsets[i].y = -x;
             break;
@@ -432,23 +436,23 @@ static void process_input_buffer(struct FrameContext *ctxt) {
     if (input_buffer.rotate_cw_pressed) {
         if (curr_shape_rotate(CLOCKWISE))
             ctxt->moves++;
-    } else if (input_buffer.rotate_acw_pressed) {
-        if (curr_shape_rotate(ANTI_CLOCKWISE))
+    } else if (input_buffer.rotate_ccw_pressed) {
+        if (curr_shape_rotate(COUNTER_CLOCKWISE))
             ctxt->moves++;
     }
 
-    // Strafe.
-    if (input_buffer.strafe_left_pressed) {
-        if (curr_shape_strafe(LEFT, false))
+    // Shift.
+    if (input_buffer.shift_left_pressed) {
+        if (curr_shape_shift(LEFT, false))
             ctxt->moves++;
-    } else if (input_buffer.strafe_left_held) {
-        if (curr_shape_strafe(LEFT, true))
+    } else if (input_buffer.shift_left_held) {
+        if (curr_shape_shift(LEFT, true))
             ctxt->moves++;
-    } else if (input_buffer.strafe_right_pressed) {
-        if (curr_shape_strafe(RIGHT, false))
+    } else if (input_buffer.shift_right_pressed) {
+        if (curr_shape_shift(RIGHT, false))
             ctxt->moves++;
-    } else if (input_buffer.strafe_right_held) {
-        if (curr_shape_strafe(RIGHT, true))
+    } else if (input_buffer.shift_right_held) {
+        if (curr_shape_shift(RIGHT, true))
             ctxt->moves++;
     }
 
@@ -457,11 +461,11 @@ static void process_input_buffer(struct FrameContext *ctxt) {
 
     // Reset everything.
     input_buffer.rotate_cw_pressed = false;
-    input_buffer.rotate_acw_pressed = false;
-    input_buffer.strafe_left_pressed = false;
-    input_buffer.strafe_right_pressed = false;
-    input_buffer.strafe_left_held = false;
-    input_buffer.strafe_right_held = false;
+    input_buffer.rotate_ccw_pressed = false;
+    input_buffer.shift_left_pressed = false;
+    input_buffer.shift_right_pressed = false;
+    input_buffer.shift_left_held = false;
+    input_buffer.shift_right_held = false;
     input_buffer.hard_drop_pressed = false;
     input_buffer.soft_drop_held = false;
 }
@@ -473,9 +477,9 @@ static bool curr_shape_rotate(enum RotationDir dir) {
     return rotate_shape(&curr_shape, dir);
 }
 
-// strafe the current shape in the given direction and return true if the move
-// was committed. `delay` is set to true when strafe is to be auto-repeated.
-static bool curr_shape_strafe(enum MovementDir dir, bool delay) {
+// shift the current shape in the given direction and return true if the move
+// was committed. `delay` is set to true when shift is to be auto-repeated.
+static bool curr_shape_shift(enum MovementDir dir, bool delay) {
     static bool repeat = false;
 
     if (dir != LEFT && dir != RIGHT)
@@ -489,7 +493,7 @@ static bool curr_shape_strafe(enum MovementDir dir, bool delay) {
         } else {
             delay_time = SHIFT_DELAY_INITIAL;
         }
-        timer = curr_shape_strafe_timer;
+        timer = curr_shape_shift_timer;
     } else {
         repeat = false;
         delay_time = SHIFT_DELAY_REPEAT;
@@ -497,8 +501,8 @@ static bool curr_shape_strafe(enum MovementDir dir, bool delay) {
     }
 
     if (move_shape(&curr_shape, dir, timer, delay_time)) {
-        curr_shape_strafe_timer = TIMER_START;
-        event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_STRAFE});
+        curr_shape_shift_timer = TIMER_START;
+        event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SHIFT});
         if (delay_time == SHIFT_DELAY_INITIAL)
             repeat = true;
         return true;
@@ -514,7 +518,7 @@ static void handle_new_move(struct FrameContext *ctxt) {
         return;
 
     // As the there was a move, set a new shadow shape.
-    shadow_shape = get_shadow_shape(curr_shape);
+    shadow_shape = get_shadow_shape(&curr_shape);
 
     event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_ACTIVE_SHAPE_UPDATE,
                                      .data.shape = curr_shape});
@@ -529,7 +533,7 @@ static void handle_new_move(struct FrameContext *ctxt) {
     // if the control flow reaches here then the engine_state is either
     // `STATE_LOCKING` or it is (`STATE_DROPPING`` and `has_landed` is true). In
     // which case count the moves and if the move budget of 15 is extinguished
-    // then do a forced hardrop.
+    // then do a forced hard drop.
     if (lock_move_count < MOVES_BEFORE_LOCK - 1) {
         engine_state_timer = TIMER_START;
         lock_move_count += ctxt->moves;
@@ -676,6 +680,8 @@ static bool row_is_empty(int row) {
     return true;
 }
 
+// Clear completed lines and settle the grid.
+// Returns the count of lines cleared.
 static int clear_lines(void) {
     struct CTetrisEvent clear_ev = {
         .type = CTETRIS_EVENT_LINE_CLEAR,
@@ -701,9 +707,9 @@ static int clear_lines(void) {
 
         if (is_full) {
             clear_ev.data.line_ev.info[clear_ev.data.line_ev.lines++] =
-                (struct LineEvInfo){
-                    .from = read,
-                    .to = read,
+                (struct Coord){
+                    .x = read,
+                    .y = read,
                 };
 
             continue;
@@ -712,9 +718,9 @@ static int clear_lines(void) {
         if (write != read) {
             if (!row_is_empty(read)) {
                 move_ev.data.line_ev.info[move_ev.data.line_ev.lines++] =
-                    (struct LineEvInfo){
-                        .from = read,
-                        .to = write,
+                    (struct Coord){
+                        .x = read,
+                        .y = write,
                     };
             }
 
@@ -800,25 +806,26 @@ static void scoring(int lines_cleared) {
 
 static void endgame_or_reset(void) {
     // Get a new shape and its shadow.
-    curr_shape = get_random_shape();
-    shadow_shape = get_shadow_shape(curr_shape);
+    curr_shape = shape_bag_get_random();
+    shadow_shape = get_shadow_shape(&curr_shape);
 
     event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_ACTIVE_SHAPE_UPDATE,
                                      .data.shape = curr_shape});
     event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SHADOW_SHAPE_UPDATE,
                                      .data.shape = shadow_shape});
-    event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_NEXT_SHAPE_UPDATE,
-                                     .data.shape = *shapes[next_shape_index]});
+    event_push(
+        (struct CTetrisEvent){.type = CTETRIS_EVENT_NEXT_SHAPE_UPDATE,
+                              .data.shape = *shape_bag[shape_bag_next_i]});
 
     // Else reset engine state variables.
     engine_state = STATE_DROPPING;
     engine_state_timer = TIMER_START;
     lock_move_count = 0;
     y_max = get_shape_y_max(&curr_shape);
-    curr_shape_strafe_timer = TIMER_INACTIVE;
+    curr_shape_shift_timer = TIMER_INACTIVE;
     has_landed = false;
 
-    // If the new shape collides? then the game is over.
+    // If the new shape collides, then the game is over.
     if (shape_collides(&curr_shape).hit) {
         event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_GAME_OVER});
         return;
