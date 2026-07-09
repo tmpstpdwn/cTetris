@@ -82,6 +82,21 @@
 // All shapes are made of 4 blocks, meaning 4 offsets.
 #define OFFSETS_COUNT 4
 
+#define SOFT_DROP_DELAY 0.05f // Drop delay (seconds).
+
+#define SHIFT_DELAY_INITIAL 0.2f // Delay before auto-repeat kicks in (seconds).
+#define SHIFT_DELAY_REPEAT 0.1f  // Delay for shift auto-repeat (seconds).
+
+// Number of moves allowed after a shape has landed before it is automatically
+// hard dropped and locked.
+#define MOVES_BEFORE_LOCK 15
+
+#define SHAPE_LOCK_DELAY 0.5f // Lock timer duration (seconds).
+
+// Score bonus multiplier for maintaining a consecutive line clear chain.
+#define COMBO_BONUS 50
+#define CALC_COMBO_POINTS(level, combo) ((level) * COMBO_BONUS * (combo))
+
 /* [ CORE STRUCTS AND ENUMS ] */
 
 // Coord struct is used to represent shape offsets and grid coordinates.
@@ -137,20 +152,18 @@ enum CTetrisEventType {
     CTETRIS_EVENT_ROTATE,
     CTETRIS_EVENT_SHIFT,
 
-    CTETRIS_EVENT_SCORE_UPDATE,
-    CTETRIS_EVENT_LINES_UPDATE,
-    CTETRIS_EVENT_LEVEL_UPDATE,
-    CTETRIS_EVENT_COMBO_UPDATE,
-
     CTETRIS_EVENT_LOCK_START,
     CTETRIS_EVENT_LOCK_RESET,
     CTETRIS_EVENT_LOCK_CANCEL,
     CTETRIS_EVENT_LOCK_DONE,
 
     CTETRIS_EVENT_LINE_CLEAR,
-    CTETRIS_EVENT_LINE_MOVE,
 
     CTETRIS_EVENT_GAME_OVER
+};
+
+struct CTetrisStats {
+    uint32_t score, lines, levels, combo;
 };
 
 // This struct represents an engine event.
@@ -159,18 +172,14 @@ struct CTetrisEvent {
     enum CTetrisEventType type;
     union {
         struct Shape shape; // Used by CTETRIS_EVENT_*_SHAPE_UPDATE.
-        // Used by CTETRIS_EVENT_(LEVEL, SCORE, COMBO, LINES)_UPDATE.
-        int score;
-        int combo;
-        int lines;
-        int level;
         // Used by CTETRIS_EVENT_LINE_(CLEAR, MOVE).
         struct {
-            // CTETRIS_EVENT_LINE_CLEAR: both x and y set to cleared row index.
-            // CTETRIS_EVENT_LINE_MOVE: x = from_row, y = to_row.
-            struct Coord info[ROWS];
-            int lines; // lines affected.
-        } line_ev;
+            // Populated whenever stats change.
+            // CTETRIS_EVENT_(SOFT_DROP, HARD_DROP, LINE_CLEAR).
+            struct CTetrisStats stats;
+            uint8_t lines_indices[4]; // At max only 4 lines can be cleared.
+            uint8_t lines_count;      // cleared lines count.
+        } action_ev;
 
     } data;
 };

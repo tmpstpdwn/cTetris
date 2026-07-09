@@ -15,20 +15,6 @@
 
 /* [ DEFINES ] */
 
-#define SOFT_DROP_DELAY 0.05f // Drop delay (seconds).
-
-#define SHIFT_DELAY_INITIAL 0.2f // Delay before auto-repeat kicks in (seconds).
-#define SHIFT_DELAY_REPEAT 0.1f  // Delay for shift auto-repeat (seconds).
-
-// Number of moves allowed after a shape has landed before it is automatically
-// hard dropped and locked.
-#define MOVES_BEFORE_LOCK 15
-
-#define SHAPE_LOCK_DELAY 0.5f // Lock timer duration (seconds).
-
-// Score bonus multiplier for maintaining a consecutive line clear chain.
-#define COMBO_BONUS 50
-
 // All non `TIMER_INACTIVE` timers will be incremented.
 #define TIMER_INACTIVE (-1.0) // Timer won't be incremented.
 #define TIMER_START (0.0)     // resets the timer.
@@ -143,11 +129,11 @@ static bool handle_grounded_shape(bool hard_drop);
 static void handle_airborne_shape(bool soft_drop);
 
 static void write_shape_to_grid(struct Shape *shape);
-static int clear_lines(void);
+static void clear_lines(void);
 static void clear_grid(void);
 
 static int get_line_bonus(uint8_t val);
-static void scoring(int lines_cleared);
+static void scoring(struct CTetrisStats *s);
 static void endgame_or_reset(void);
 
 /* [ PUBLIC API FN DEF ] */
@@ -580,17 +566,13 @@ static bool handle_grounded_shape(bool hard_drop) {
     }
 
     if (hard_drop) {
-        struct Coord from = curr_shape.pos;
         int rows_dropped = shadow_shape.pos.y - curr_shape.pos.y;
         score += rows_dropped * 2;
         curr_shape.pos = shadow_shape.pos;
 
-        event_push((struct CTetrisEvent){
-            .type = CTETRIS_EVENT_HARD_DROP,
-        });
-
-        event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SCORE_UPDATE,
-                                         .data.score = score});
+        struct CTetrisStats stats = {score, lines, level, 0};
+        event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_HARD_DROP,
+                                         .data.action_ev.stats = stats});
 
         event_push(
             (struct CTetrisEvent){.type = CTETRIS_EVENT_ACTIVE_SHAPE_UPDATE,
@@ -607,7 +589,7 @@ static bool handle_grounded_shape(bool hard_drop) {
         .type = CTETRIS_EVENT_LOCK_DONE,
     });
 
-    scoring(clear_lines());
+    clear_lines();
     endgame_or_reset();
 
     return true;
@@ -626,16 +608,15 @@ static void handle_airborne_shape(bool soft_drop) {
         });
     }
 
-    // The core drop mechanism.
     struct Shape next_possible_shape = curr_shape;
     double drop_delay = get_drop_delay(soft_drop);
     if (move_shape(&next_possible_shape, DOWN, engine_state_timer,
                    drop_delay)) {
         if (soft_drop) {
             score++;
-            event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SCORE_UPDATE,
-                                             .data.score = score});
-            event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SOFT_DROP});
+            struct CTetrisStats stats = {score, lines, level, 0};
+            event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SOFT_DROP,
+                                             .data.action_ev.stats = stats});
         }
 
         curr_shape = next_possible_shape;
@@ -671,33 +652,15 @@ static void write_shape_to_grid(struct Shape *shape) {
     }
 }
 
-static bool row_is_empty(int row) {
-    for (int c = 0; c < COLS; c++) {
-        if (grid[row][c] != N)
-            return false;
-    }
-
-    return true;
-}
-
 // Clear completed lines and settle the grid.
-// Returns the count of lines cleared.
-static int clear_lines(void) {
-    struct CTetrisEvent clear_ev = {
-        .type = CTETRIS_EVENT_LINE_CLEAR,
-        .data.line_ev.lines = 0,
-    };
-
-    struct CTetrisEvent move_ev = {
-        .type = CTETRIS_EVENT_LINE_MOVE,
-        .data.line_ev.lines = 0,
-    };
+static void clear_lines(void) {
+    struct CTetrisEvent clear_ev = {0};
+    clear_ev.type = CTETRIS_EVENT_LINE_CLEAR;
 
     int write = ROWS - 1;
 
     for (int read = ROWS - 1; read >= 0; read--) {
         bool is_full = true;
-
         for (int c = 0; c < COLS; c++) {
             if (grid[read][c] == N) {
                 is_full = false;
@@ -706,32 +669,23 @@ static int clear_lines(void) {
         }
 
         if (is_full) {
-            clear_ev.data.line_ev.info[clear_ev.data.line_ev.lines++] =
-                (struct Coord){
-                    .x = read,
-                    .y = read,
-                };
-
+            clear_ev.data.action_ev
+                .lines_indices[clear_ev.data.action_ev.lines_count++] =
+                (uint8_t)read;
             continue;
         }
 
         if (write != read) {
-            if (!row_is_empty(read)) {
-                move_ev.data.line_ev.info[move_ev.data.line_ev.lines++] =
-                    (struct Coord){
-                        .x = read,
-                        .y = write,
-                    };
-            }
-
             memcpy(grid[write], grid[read], sizeof(grid[read]));
         }
-
         write--;
     }
 
-    if (clear_ev.data.line_ev.lines == 0)
-        return 0;
+    clear_ev.data.action_ev.stats.lines = clear_ev.data.action_ev.lines_count;
+    scoring(&clear_ev.data.action_ev.stats);
+
+    if (clear_ev.data.action_ev.stats.lines == 0)
+        return;
 
     for (int r = write; r >= 0; r--) {
         for (int c = 0; c < COLS; c++) {
@@ -740,11 +694,6 @@ static int clear_lines(void) {
     }
 
     event_push(clear_ev);
-
-    if (move_ev.data.line_ev.lines > 0)
-        event_push(move_ev);
-
-    return clear_ev.data.line_ev.lines;
 }
 
 // Clear the grid.
@@ -771,36 +720,23 @@ static int get_line_bonus(uint8_t val) {
 }
 
 // Adjust scoring based on number of lines cleared.
-static void scoring(int lines_cleared) {
-    if (lines_cleared) {
-        int bonus = get_line_bonus(lines_cleared);
+static void scoring(struct CTetrisStats *s) {
+    if (s->lines) {
+        int bonus = get_line_bonus(s->lines);
         score += bonus * level;
-        lines += lines_cleared;
+        score += CALC_COMBO_POINTS(level, combo);
 
-        event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_LINES_UPDATE,
-                                         .data.lines = lines});
+        lines += s->lines;
+        level = (lines / 10) + 1;
 
-        int new_possible_level = (lines / 10) + 1;
-        if (new_possible_level != level) {
-            level = new_possible_level;
-            event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_LEVEL_UPDATE,
-                                             .data.level = level});
-        }
-        if (combo > 0) {
-            score += combo * COMBO_BONUS * level;
-            event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_COMBO_UPDATE,
-                                             .data.combo = combo});
-        }
+        s->score = score;
+        s->lines = lines;
+        s->levels = level;
+        s->combo = combo;
+
         combo++;
-
-        event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SCORE_UPDATE,
-                                         .data.score = score});
-    } else {
-        if (combo) {
-            combo = 0;
-            event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_COMBO_UPDATE,
-                                             .data.combo = combo});
-        }
+    } else if (combo > 0) {
+        combo = 0;
     }
 }
 

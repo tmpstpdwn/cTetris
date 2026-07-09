@@ -2,6 +2,7 @@
 
 #include "renderer.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ctetris.h"
@@ -18,27 +19,33 @@
 #define TITLE_ACCENTED "c"
 #define TITLE_DIM "Tetris"
 
+#define CREDIT_TEXT "cTetris | Tmpstpdwn"
+
 #define SPLIT_AT_PCT 0.5f
 
 #define TEXT_BUFF_LEN 20
 
-#define TITLE_FONT_SIZE FONT_MD_S
-#define BADGE_FONT_SIZE FONT_SM_S
-#define ACTIVE_STAT_FONT_SIZE FONT_LG_S
-#define RECORD_STAT_FONT_SIZE FONT_MD_S
+#define TITLE_FONT_SIZE FONT_LG_S
 #define LABEL_FONT_SIZE FONT_MD_S
+#define NUMERIC_FONT_SIZE FONT_LG_S
+#define POPUP_FONT_SIZE FONT_MD_S
+#define BADGE_FONT_SIZE FONT_SM_S
+#define CREDIT_FONT_SIZE FONT_SM_S
 
 #define FADE_IN_SPEED 5.0f
 #define FADE_OUT_SPEED 4.0f
 #define LINE_MOVE_SPEED 10.0f
 #define FLASH_SPEED 10.0f
-#define LOCK_FADE_SPEED 2.0f
+#define LOCK_FADE_SPEED (1.0f / SHAPE_LOCK_DELAY)
 
-#define TRAIL_ANIM_SPEED 12.0f
+#define POPUP_FADE_IN_SPEED 15.0f
+#define POPUP_FADE_OUT_SPEED 1.0f
+
+#define TRAIL_ANIM_SPEED 10.0f
 #define BADGE_ANIM_SPEED 10.0f
 
-#define THEME_T_SPEED 10.0f
-#define GAMEOVER_T_SPEED 5.0f
+#define THEME_LERP_SPEED 5.0f
+#define GAMEOVER_LERP_SPEED 5.0f
 
 /* [ ENUMS AND STRUCTS ] */
 
@@ -54,7 +61,8 @@ enum ColorIndex {
     COL_BG_ALT,
     COL_FG,
     COL_FG_ALT,
-    COL_OUTLINE,
+    COL_NUETRAL,
+    COL_SUBTLE,
     COL_O,
     COL_L,
     COL_I,
@@ -62,7 +70,6 @@ enum ColorIndex {
     COL_S,
     COL_J,
     COL_Z,
-    COL_SHADOW,
     COL_COUNT,
 };
 
@@ -71,18 +78,18 @@ enum KeyBind {
     KB_MOVE_LEFT,
     KB_MOVE_RIGHT,
     KB_ROTATE_CW,
-    KB_ROTATE_ACW, // Anit-clockwise.
+    KB_ROTATE_CCW,
     KB_SOFT_DROP,
     KB_HARD_DROP,
     KB_PAUSE,
     KB_RESTART,
     KB_MUTE,
     KB_THEME,
-    KEY_BINDS,
+    KB_COUNT,
 };
 
 // UI animation types.
-enum UIAnimType {
+enum AnimType {
     ANIM_NONE,      // No animations.
     ANIM_LERP,      // Linear interpolation bw colors: lerp_from -> lerp_to.
     ANIM_FLASH,     // Pretty much "lerp to WHITE".
@@ -90,8 +97,8 @@ enum UIAnimType {
 };
 
 // Represents a ui animation.
-struct UIAnim {
-    enum UIAnimType type;
+struct Anim {
+    enum AnimType type;
     float progress; // (0.0f - 1.0f)
     float speed;    // duration = 1/speed.
     // For ANIM_TRANSLATE.
@@ -105,7 +112,7 @@ struct UIAnim {
 // Represents Any sort of text used on UI.
 struct UIText {
     char text[TEXT_BUFF_LEN]; // buffer.
-    struct UIAnim anim;
+    struct Anim anim;
     Rectangle bounds;
     Font *font;
     int font_size;
@@ -113,18 +120,25 @@ struct UIText {
     enum ColorIndex color;
 };
 
+// Used for score popup.
+struct UIPopup {
+    bool active;
+    bool fading_out;
+    struct UIText text;
+};
+
 // Represents a badge, which is just a rectangle with text inside it and a
 // border.
 struct UIBadge {
-    struct UIAnim border_anim;
-    struct UIAnim bg_anim;
+    bool active;
+    struct Anim border_anim;
+    struct Anim bg_anim;
     enum ColorIndex border_col;
     enum ColorIndex bg_col;
     struct UIText text;
     Rectangle bounds;
     int pad_h;
     int pad_v;
-    bool active;
 };
 
 // Represents a single keyinfo, which just a badge containing key name and its
@@ -141,16 +155,16 @@ struct UIDivider {
     int thickness;
 };
 
-// Represents a grid row.
+// Represents a grid cell.
 struct UIGridCell {
-    struct UIAnim anim;
+    struct Anim anim;
     enum ShapeType type;
 };
 
 // A UIShape.
 struct UIShape {
     struct Shape shape; // Engine's shape definition.
-    struct UIAnim anim;
+    struct Anim anim;
 };
 
 /* [ GLOBAL - VARIABLES ] */
@@ -203,8 +217,8 @@ static const Color COLORS[SCHEME_COUNT][COL_COUNT] =
                 [COL_BG_ALT] = {28, 28, 30, 255},
                 [COL_FG] = {229, 229, 234, 255},
                 [COL_FG_ALT] = {142, 142, 147, 255},
-                [COL_OUTLINE] = {44, 44, 46, 255},
-                [COL_SHADOW] = {50, 50, 52, 255},
+                [COL_SUBTLE] = {44, 44, 46, 255},
+                [COL_NUETRAL] = {50, 50, 52, 255},
                 [COL_O] = {242, 201, 76, 255},
                 [COL_L] = {242, 153, 74, 255},
                 [COL_I] = {86, 204, 242, 255},
@@ -219,8 +233,8 @@ static const Color COLORS[SCHEME_COUNT][COL_COUNT] =
                 [COL_BG_ALT] = {230, 230, 235, 255},
                 [COL_FG] = {44, 44, 46, 255},
                 [COL_FG_ALT] = {142, 142, 147, 255},
-                [COL_OUTLINE] = {209, 209, 214, 255},
-                [COL_SHADOW] = {218, 218, 222, 255},
+                [COL_SUBTLE] = {209, 209, 214, 255},
+                [COL_NUETRAL] = {218, 218, 222, 255},
                 [COL_O] = {212, 163, 11, 255},
                 [COL_L] = {214, 116, 28, 255},
                 [COL_I] = {13, 142, 179, 255},
@@ -238,12 +252,24 @@ static enum ColorScheme prev_scheme = SCHEME_DARK;
 static float theme_switch_t = 0.0f;
 static float game_over_t = 0.0f;
 
-static struct UIText txt_title_accent, txt_title_dim;
-static struct UIText txt_lbl_score, txt_lbl_best, txt_lbl_level, txt_lbl_lines,
-    txt_lbl_next, txt_lbl_controls;
-static struct UIText txt_score, txt_hs, txt_level, txt_lines;
+static struct UIKeyInfo keybindings[KB_COUNT];
 
-static struct UIBadge badge_combo;
+// Key names for keyboard.
+static const char *keyboard_key_names[KB_COUNT] = {
+    [KB_MOVE_LEFT] = "LEFT", [KB_MOVE_RIGHT] = "RIGHT", [KB_ROTATE_CW] = "UP",
+    [KB_ROTATE_CCW] = "Z",   [KB_SOFT_DROP] = "DOWN",   [KB_HARD_DROP] = "SPC",
+    [KB_PAUSE] = "P",        [KB_RESTART] = "R",        [KB_MUTE] = "M",
+    [KB_THEME] = "T",
+};
+
+// Key bind descriptions.
+static const char *kb_desc[KB_COUNT] = {
+    [KB_MOVE_LEFT] = "Move left", [KB_MOVE_RIGHT] = "Move right",
+    [KB_ROTATE_CW] = "Rotate cw", [KB_ROTATE_CCW] = "Rotate ccw",
+    [KB_SOFT_DROP] = "Soft drop", [KB_HARD_DROP] = "Hard drop",
+    [KB_PAUSE] = "Pause",         [KB_RESTART] = "Restart",
+    [KB_MUTE] = "Mute",           [KB_THEME] = "Toggle theme",
+};
 
 static struct UIDivider div_hdr_bottom;
 static struct UIDivider div_sb_left;
@@ -251,6 +277,15 @@ static struct UIDivider div_sb_1;
 static struct UIDivider div_sb_2;
 static struct UIDivider div_sb_3;
 static struct UIDivider div_sb_stats;
+
+static struct UIText txt_title_accent, txt_title_dim;
+static struct UIText txt_lbl_score, txt_lbl_best, txt_lbl_level, txt_lbl_lines,
+    txt_lbl_next, txt_lbl_controls;
+static struct UIText txt_score, txt_hs, txt_level, txt_lines;
+static struct UIText txt_credit;
+
+// Popup for score and combo.
+static struct UIPopup pp_score, pp_combo;
 
 // The visual ui grid which will be used for drawing.
 static struct UIGridCell ui_grid[ROWS][COLS];
@@ -270,7 +305,7 @@ static bool curr_shape_exists = false;
 static bool curr_shadow_exists = false;
 
 // Hard drop trail animation.
-static struct UIAnim trail_anim;
+static struct Anim trail_anim;
 // Hard drop trail animations works by drawing vertical rectangular stripes
 // along the horizontal axis bw the shape and its shadow.
 // For example: A Horizontal I shape would need 4 of these rectangles, a
@@ -281,33 +316,20 @@ static Rectangle trail_rects[OFFSETS_COUNT];
 // atmost be only 4 units horizontally long.
 static int trail_rect_count;
 
-static struct UIKeyInfo keybindings[KEY_BINDS];
-
-// Key names for keyboard.
-static const char *keyboard_key_names[KEY_BINDS] = {
-    [KB_MOVE_LEFT] = "LEFT", [KB_MOVE_RIGHT] = "RIGHT", [KB_ROTATE_CW] = "UP",
-    [KB_ROTATE_ACW] = "Z",   [KB_SOFT_DROP] = "DOWN",   [KB_HARD_DROP] = "SPC",
-    [KB_PAUSE] = "P",        [KB_RESTART] = "R",        [KB_MUTE] = "M",
-    [KB_THEME] = "T",
-};
-
-// Key bind descriptions.
-static const char *kb_desc[KEY_BINDS] = {
-    [KB_MOVE_LEFT] = "Move left", [KB_MOVE_RIGHT] = "Move right",
-    [KB_ROTATE_CW] = "Rotate cw", [KB_ROTATE_ACW] = "Rotate ccw",
-    [KB_SOFT_DROP] = "Soft drop", [KB_HARD_DROP] = "Hard drop",
-    [KB_PAUSE] = "Pause",         [KB_RESTART] = "Restart",
-    [KB_MUTE] = "Mute",           [KB_THEME] = "Toggle theme",
-};
+static struct Coord grid_line_moves[ROWS];
+static int line_move_count;
+static bool move_lines = false;
 
 // Game state stuff
-static uint32_t score = 0;
-static uint32_t high_score = 0;
+static uint32_t score, level, lines, high_score;
 
 static bool paused = false;
 static bool audio_muted = false;
 static bool block_engine = false;
 static bool game_over = false;
+
+static bool truthy = true;
+static bool falsy = false;
 
 /* [ FN DEF ] */
 
@@ -358,14 +380,14 @@ static Font *get_font_from_sz(int font_size) {
 
 /* Animation utilities */
 
-static void anim_set_none(struct UIAnim *anim) {
+static void anim_set_none(struct Anim *anim) {
     anim->type = ANIM_NONE;
     anim->progress = 0.0f;
     anim->speed = 0.0f;
 }
 
-static void anim_set_lerp(struct UIAnim *anim, float speed,
-                          enum ColorIndex from, enum ColorIndex to) {
+static void anim_set_lerp(struct Anim *anim, float speed, enum ColorIndex from,
+                          enum ColorIndex to) {
     anim->type = ANIM_LERP;
     anim->progress = 0.0f;
     anim->speed = speed;
@@ -373,7 +395,7 @@ static void anim_set_lerp(struct UIAnim *anim, float speed,
     anim->lerp_to = to;
 }
 
-static void anim_set_translate(struct UIAnim *anim, float speed, Vector2 from,
+static void anim_set_translate(struct Anim *anim, float speed, Vector2 from,
                                Vector2 to) {
     anim->type = ANIM_TRANSLATE;
     anim->progress = 0.0f;
@@ -382,13 +404,13 @@ static void anim_set_translate(struct UIAnim *anim, float speed, Vector2 from,
     anim->move_to = to;
 }
 
-static void anim_set_flash(struct UIAnim *anim, float speed) {
+static void anim_set_flash(struct Anim *anim, float speed) {
     anim->type = ANIM_FLASH;
     anim->progress = 0.0f;
     anim->speed = speed;
 }
 
-static void anim_update(struct UIAnim *anim, float dt) {
+static void anim_update(struct Anim *anim, float dt) {
     if (anim->type == ANIM_NONE)
         return;
 
@@ -428,22 +450,6 @@ static void init_ui_divider(struct UIDivider *divider, enum ColorIndex color,
     divider->thickness = (thickness < 1) ? 1 : thickness;
 }
 
-static void update_ui_divider(struct UIDivider *divider, int from_x, int from_y,
-                              int to_x, int to_y) {
-    int width = to_x > from_x ? to_x - from_x : from_x - to_x;
-    int height = to_y > from_y ? to_y - from_y : from_y - to_y;
-
-    if (width == 0)
-        width = divider->thickness;
-    if (height == 0)
-        height = divider->thickness;
-
-    divider->bounds = (Rectangle){.x = (float)(from_x < to_x ? from_x : to_x),
-                                  .y = (float)(from_y < to_y ? from_y : to_y),
-                                  .width = (float)width,
-                                  .height = (float)height};
-}
-
 static void init_ui_text(struct UIText *ui_text, Font *font, int font_size,
                          enum ColorIndex col) {
     ui_text->color = col;
@@ -458,6 +464,13 @@ static void init_ui_text(struct UIText *ui_text, Font *font, int font_size,
         ui_text->font_spacing = 1;
 
     anim_set_none(&ui_text->anim);
+}
+
+static void init_ui_popup(struct UIPopup *popup, Font *font, int font_size,
+                          enum ColorIndex col) {
+    popup->active = false;
+    popup->fading_out = false;
+    init_ui_text(&popup->text, font, font_size, col);
 }
 
 static void init_ui_badge(struct UIBadge *ui_badge, Font *font, int font_size,
@@ -478,12 +491,28 @@ static void init_ui_badge(struct UIBadge *ui_badge, Font *font, int font_size,
 
 static void init_ui_keyinfo(struct UIKeyInfo *key_info, Font *font,
                             int font_size) {
-    init_ui_badge(&key_info->badge, font, font_size, COL_OUTLINE, COL_BG_ALT,
+    init_ui_badge(&key_info->badge, font, font_size, COL_SUBTLE, COL_BG_ALT,
                   COL_FG_ALT);
     init_ui_text(&key_info->desc, font, font_size, COL_FG_ALT);
 }
 
 /* Fns to update primitive ui components */
+
+static void update_ui_divider(struct UIDivider *divider, int from_x, int from_y,
+                              int to_x, int to_y) {
+    int width = to_x > from_x ? to_x - from_x : from_x - to_x;
+    int height = to_y > from_y ? to_y - from_y : from_y - to_y;
+
+    if (width == 0)
+        width = divider->thickness;
+    if (height == 0)
+        height = divider->thickness;
+
+    divider->bounds = (Rectangle){.x = (float)(from_x < to_x ? from_x : to_x),
+                                  .y = (float)(from_y < to_y ? from_y : to_y),
+                                  .width = (float)width,
+                                  .height = (float)height};
+}
 
 static void update_ui_text(struct UIText *ui_text, const char *text, int *x,
                            int *y) {
@@ -502,6 +531,24 @@ static void update_ui_text(struct UIText *ui_text, const char *text, int *x,
 
     if (y)
         ui_text->bounds.y = *y;
+}
+
+static void update_ui_popup(struct UIPopup *popup, const char *text, int *x,
+                            int *y, bool *active) {
+    if (active) {
+        // If the popup is set to active state while its already active and the
+        // popup is rn animating fade out, then pull back the animation to the
+        // previous checkpoint which is right when fade in finishes (text is
+        // completely opaque).
+        if (*active && popup->active && popup->fading_out) {
+            anim_set_lerp(&popup->text.anim, POPUP_FADE_IN_SPEED, COL_BG,
+                          popup->text.color);
+            popup->text.anim.progress = 1;
+            popup->fading_out = false;
+        }
+        popup->active = *active;
+    }
+    update_ui_text(&popup->text, text, x, y);
 }
 
 static void update_ui_badge(struct UIBadge *ui_badge, const char *text, int *x,
@@ -534,17 +581,17 @@ static void update_ui_badge(struct UIBadge *ui_badge, const char *text, int *x,
     enum ColorIndex border_to, bg_to, text_to;
 
     if (*active) {
-        border_from = COL_OUTLINE;
+        border_from = COL_SUBTLE;
         bg_from = COL_BG_ALT;
         text_from = COL_FG_ALT;
         border_to = COL_FG;
-        bg_to = COL_OUTLINE;
+        bg_to = COL_SUBTLE;
         text_to = COL_FG;
     } else {
         border_from = COL_FG;
-        bg_from = COL_OUTLINE;
+        bg_from = COL_SUBTLE;
         text_from = COL_FG;
-        border_to = COL_OUTLINE;
+        border_to = COL_SUBTLE;
         bg_to = COL_BG_ALT;
         text_to = COL_FG_ALT;
     }
@@ -579,7 +626,7 @@ static void update_ui_keyinfo(struct UIKeyInfo *key_info, const char *key_text,
 
 // Draw a rect applying the given animation properties.
 static void draw_rect(Rectangle rect, enum ColorIndex base_color, bool outline,
-                      const struct UIAnim *anim) {
+                      const struct Anim *anim) {
     Color col = index_to_color(base_color);
     Rectangle drawn_rect = rect;
 
@@ -603,6 +650,10 @@ static void draw_rect(Rectangle rect, enum ColorIndex base_color, bool outline,
         DrawRectangleRec(drawn_rect, col);
 }
 
+static void draw_ui_divider(const struct UIDivider *ui_divider) {
+    draw_rect(ui_divider->bounds, ui_divider->color, false, NULL);
+}
+
 static void draw_ui_text(struct UIText *ui_text, float dt) {
     Color col = index_to_color(ui_text->color);
     if (ui_text->anim.type == ANIM_LERP) {
@@ -616,6 +667,30 @@ static void draw_ui_text(struct UIText *ui_text, float dt) {
     anim_update(&ui_text->anim, dt);
 }
 
+static void draw_ui_popup(struct UIPopup *popup, float dt) {
+    if (!popup->active)
+        return;
+
+    if (popup->text.anim.type == ANIM_NONE) {
+        anim_set_lerp(&popup->text.anim, POPUP_FADE_IN_SPEED, COL_BG,
+                      popup->text.color);
+    }
+
+    draw_ui_text(&popup->text, dt);
+
+    if (popup->text.anim.type == ANIM_NONE) {
+        if (popup->fading_out) {
+            popup->active = false;
+            popup->fading_out = false;
+            return;
+        } else {
+            anim_set_lerp(&popup->text.anim, POPUP_FADE_OUT_SPEED,
+                          popup->text.color, COL_BG);
+            popup->fading_out = true;
+        }
+    }
+}
+
 static void draw_ui_badge(struct UIBadge *ui_badge, float dt) {
     draw_rect(ui_badge->bounds, ui_badge->bg_col, false, &ui_badge->bg_anim);
     draw_rect(ui_badge->bounds, ui_badge->border_col, true,
@@ -626,15 +701,11 @@ static void draw_ui_badge(struct UIBadge *ui_badge, float dt) {
     anim_update(&ui_badge->bg_anim, dt);
 }
 
-static void draw_ui_divider(const struct UIDivider *ui_divider) {
-    draw_rect(ui_divider->bounds, ui_divider->color, false, NULL);
-}
-
 /* Caching utilities */
 
 /* UI components store pixel coordinates (position) in them.
- * Following fns are responsible for deciding where ui compnents should go by
- * setting their position.
+ * Following fns are responsible for deciding where ui compnents should go
+ * by setting their position.
  * */
 
 static void recache_dividers(void) {
@@ -667,7 +738,7 @@ static int recache_sidebar_score(int sb_x, int y) {
     int best_lbl_x = LW_S - SB_CON_PAD_S - (int)txt_lbl_best.bounds.width;
     update_ui_text(&txt_lbl_best, NULL, &best_lbl_x, &y);
 
-    y += FONT_MD_S + SB_LABEL_MG_S;
+    y += txt_lbl_score.bounds.height + SB_LABEL_MG_S;
 
     update_ui_text(&txt_score, NULL, &sb_x, &y);
 
@@ -676,11 +747,7 @@ static int recache_sidebar_score(int sb_x, int y) {
 
     update_ui_text(&txt_hs, NULL, &best_val_x, &y);
 
-    y += FONT_LG_S + SB_LABEL_MG_S;
-
-    update_ui_badge(&badge_combo, NULL, &sb_x, &y, NULL);
-
-    y += (int)badge_combo.bounds.height + SB_SEC_PAD_S;
+    y += FONT_LG_S + SB_SEC_PAD_S;
 
     update_ui_divider(&div_sb_1, sb_x, y, LW_S - SB_CON_PAD_S, y);
 
@@ -732,11 +799,19 @@ static void recache_sidebar_controls(int sb_x, int y) {
     update_ui_text(&txt_lbl_controls, NULL, &sb_x, &y);
     y += FONT_MD_S + SB_LABEL_MG_S;
 
-    for (int i = 0; i < KEY_BINDS; i++) {
+    for (int i = 0; i < KB_COUNT; i++) {
         update_ui_keyinfo(&keybindings[i], keyboard_key_names[i], kb_desc[i],
                           &sb_x, &y);
         y += (int)keybindings[i].badge.bounds.height + SB_KEYINFO_MG_S;
     }
+}
+
+static void recache_credit(void) {
+    int credit_x =
+        SB_CON_X_S + SB_CON_W_S / 2 - (int)txt_credit.bounds.width / 2;
+    int credit_y =
+        SB_CON_Y_S + SB_CON_H_S - txt_credit.bounds.height - SB_CON_PAD_S;
+    update_ui_text(&txt_credit, NULL, &credit_x, &credit_y);
 }
 
 static void recache_ui_layout(void) {
@@ -750,16 +825,15 @@ static void recache_ui_layout(void) {
     y = recache_sidebar_stats(sb_x, y);
     y = recache_sidebar_preview(sb_x, y);
     recache_sidebar_controls(sb_x, y);
+    recache_credit();
 }
 
 /* Draw UI components */
 
-// Draw the hard drop trail if active.
-
 static void draw_ui_grid(float dt) {
     Rectangle border_rect = {(float)GRID_CX_S, (float)GRID_CY_S,
                              (float)(CELL_S * COLS), (float)(CELL_S * ROWS)};
-    draw_rect(border_rect, COL_OUTLINE, true, NULL);
+    draw_rect(border_rect, COL_SUBTLE, true, NULL);
 
     bool still_animating = false;
     for (int r = 0; r < ROWS; r++) {
@@ -791,15 +865,13 @@ static void draw_ui_shape(struct UIShape *ui_shape, enum ColorIndex col_ind,
     for (int i = 0; i < OFFSETS_COUNT; i++) {
         int gc = ui_shape->shape.pos.x + ui_shape->shape.offsets[i].x;
         int gr = ui_shape->shape.pos.y + ui_shape->shape.offsets[i].y;
-        if (gr >= 0 && gr < ROWS && gc >= 0 && gc < COLS) {
-            Rectangle r = {
-                (float)(GRID_CX_S + gc * CELL_S + CELL_PAD_S),
-                (float)(GRID_CY_S + gr * CELL_S + CELL_PAD_S),
-                (float)(CELL_S - CELL_PAD_S * 2),
-                (float)(CELL_S - CELL_PAD_S * 2),
-            };
-            draw_rect(r, col_ind, false, &ui_shape->anim);
-        }
+        Rectangle r = {
+            (float)(GRID_CX_S + gc * CELL_S + CELL_PAD_S),
+            (float)(GRID_CY_S + gr * CELL_S + CELL_PAD_S),
+            (float)(CELL_S - CELL_PAD_S * 2),
+            (float)(CELL_S - CELL_PAD_S * 2),
+        };
+        draw_rect(r, col_ind, false, &ui_shape->anim);
     }
     anim_update(&ui_shape->anim, dt);
 }
@@ -815,7 +887,6 @@ static void draw_score(float dt) {
     draw_ui_text(&txt_score, dt);
     draw_ui_text(&txt_hs, dt);
 
-    draw_ui_badge(&badge_combo, dt);
     draw_ui_divider(&div_sb_1);
 }
 
@@ -836,11 +907,10 @@ static void draw_preview(float dt) {
     int box = 4 * PREV_CELL_S;
     int box_y = (int)txt_lbl_next.bounds.y + FONT_MD_S + SB_LABEL_MG_S;
     Rectangle box_r = {(float)sb_x, (float)box_y, (float)box, (float)box};
-    draw_rect(box_r, COL_OUTLINE, true, NULL);
+    draw_rect(box_r, COL_SUBTLE, true, NULL);
 
     for (int r = 0; r < 4; r++) {
-        for (int c = 0; c < 4;
-             c++) { // Fix: increment c instead of r to break infinite loop
+        for (int c = 0; c < 4; c++) {
             Rectangle cell_r = {
                 (float)(sb_x + c * PREV_CELL_S + CELL_PAD_S),
                 (float)(box_y + r * PREV_CELL_S + CELL_PAD_S),
@@ -887,26 +957,26 @@ static void draw_preview(float dt) {
 static void draw_controls(float dt) {
     draw_ui_text(&txt_lbl_controls, dt);
 
-    for (int i = 0; i < KEY_BINDS; i++) {
+    for (int i = 0; i < KB_COUNT; i++) {
         draw_ui_badge(&keybindings[i].badge, dt);
         draw_ui_text(&keybindings[i].desc, dt);
     }
 }
+
+static void draw_credit(void) { draw_ui_text(&txt_credit, 0.0f); }
 
 /* Hard drop trail */
 
 // Sets up hard drop trail rectangles for the given shape and path.
 static void trail_set(struct Shape shape, struct Coord from, struct Coord to) {
     /* The objective here is to use 2 arrays of size OFFSETS_COUNT.
-     * One stores grid coordinates of the given shape's bottom most cells when
-     * it is at `from`.
-     * The other stores grid coordinates of the given shape's top
-     * most cells when it is at `to`.
-     * Then rectangles are drawn bw them.
-     * The number of rectangles to be drawn are the number of bottom most / top
-     * most cells that shape has in that particular orientation.
-     * For example:
-     * The O shape only requires just 2 rectangles in all orientation.
+     * One stores grid coordinates of the given shape's bottom most cells
+     * when it is at `from`. The other stores grid coordinates of the given
+     * shape's top most cells when it is at `to`. Then rectangles are drawn
+     * bw them. The number of rectangles to be drawn are the number of
+     * bottom most / top most cells that shape has in that particular
+     * orientation. For example: The O shape only requires just 2 rectangles
+     * in all orientation.
      * */
 
     trail_rect_count = 0;
@@ -963,15 +1033,16 @@ static void trail_set(struct Shape shape, struct Coord from, struct Coord to) {
     }
 
     // Setting animation.
-    anim_set_lerp(&trail_anim, TRAIL_ANIM_SPEED, COL_SHADOW, COL_SHADOW);
+    anim_set_lerp(&trail_anim, TRAIL_ANIM_SPEED, COL_NUETRAL, COL_NUETRAL);
 }
 
+// Draw the hard drop trail if active.
 static void draw_trail(float dt) {
     if (trail_anim.type == ANIM_NONE)
         return;
 
     for (int i = 0; i < trail_rect_count; i++) {
-        draw_rect(trail_rects[i], COL_SHADOW, false, &trail_anim);
+        draw_rect(trail_rects[i], COL_NUETRAL, false, &trail_anim);
     }
 
     anim_update(&trail_anim, dt);
@@ -979,72 +1050,95 @@ static void draw_trail(float dt) {
 
 /* Event handler */
 
-// Handle the given engine event. returns false if the engine should be blocked.
+// Handle the given engine event. returns false if the engine should be
+// blocked.
 static bool handle_event(struct CTetrisEvent ev) {
     switch (ev.type) {
     case CTETRIS_EVENT_GAME_OVER:
         game_over = true;
         game_over_t = 0.0f;
-        return false; // Engine blocked untile manual reset.
+        return false; // Engine blocked until manual reset.
 
-    case CTETRIS_EVENT_LINE_MOVE:
-        for (int i = 0; i < ev.data.line_ev.lines; i++) {
-            int src = ev.data.line_ev.info[i].x;
-            int dst = ev.data.line_ev.info[i].y;
-
-            for (int c = 0; c < COLS; c++) {
-                if (ui_grid[src][c].type == N)
-                    continue;
-                ui_grid[dst][c] = ui_grid[src][c];
-                anim_set_translate(
-                    &ui_grid[dst][c].anim, LINE_MOVE_SPEED,
-                    (Vector2){0.0f, (float)((src - dst) * CELL_S)},
-                    (Vector2){0.0f, 0.0f});
-                ui_grid[src][c].type = N;
-            }
+    case CTETRIS_EVENT_LINE_CLEAR: {
+        struct CTetrisStats s = ev.data.action_ev.stats;
+        int combo_points = CALC_COMBO_POINTS(level, s.combo);
+        int score_delta = s.score - score;
+        score = s.score;
+        level = s.levels;
+        lines = s.lines;
+        char buf[TEXT_BUFF_LEN];
+        snprintf(buf, sizeof(buf), "%u", score);
+        update_ui_text(&txt_score, buf, NULL, NULL);
+        snprintf(buf, sizeof(buf), "%u", level);
+        update_ui_text(&txt_level, buf, NULL, NULL);
+        snprintf(buf, sizeof(buf), "%u", lines);
+        update_ui_text(&txt_lines, buf, NULL, NULL);
+        // Score / Combo popups.
+        int x = txt_score.bounds.x + txt_score.bounds.width +
+                POPUP_FONT_SIZE * 0.5f;
+        int y = txt_score.bounds.y +
+                ((txt_score.bounds.height - pp_score.text.bounds.height) / 2);
+        if (score_delta > 0) {
+            snprintf(buf, sizeof(buf), "+%u", score_delta - combo_points);
+            update_ui_popup(&pp_score, buf, &x, &y, &truthy);
+            x += pp_score.text.bounds.width + POPUP_FONT_SIZE * 0.5f;
         }
-        return false; // Engine blocked for animation.
-
-    case CTETRIS_EVENT_LINE_CLEAR:
-        for (int i = 0; i < ev.data.line_ev.lines; i++) {
-            int row = ev.data.line_ev.info[i].x;
+        if (combo_points > 0) {
+            snprintf(buf, sizeof(buf), "%ux +%u", s.combo, combo_points);
+            update_ui_popup(&pp_combo, buf, &x, &y, &truthy);
+        }
+        // Fade out cleared lines.
+        for (int i = 0; i < ev.data.action_ev.lines_count; i++) {
+            int row = ev.data.action_ev.lines_indices[i];
             for (int c = 0; c < COLS; c++) {
                 anim_set_lerp(&ui_grid[row][c].anim, FADE_OUT_SPEED,
                               piece_color(ui_grid[row][c].type), COL_BG_ALT);
                 ui_grid[row][c].type = N;
             }
         }
-        return false; // Engine blocked for animation.
 
-    case CTETRIS_EVENT_SCORE_UPDATE:
-        score = ev.data.score;
-        snprintf(txt_score.text, sizeof(txt_score.text), "%u", score);
-        if (score > high_score)
-            renderer_set_high_score(score);
-        break;
+        // Store cleared rows for line move animation after fade completes.
+        line_move_count = 0;
+        for (int src = ROWS - 1; src >= 0; src--) {
+            int drop_distance = 0;
+            for (int i = 0; i < ev.data.action_ev.lines_count; i++) {
+                if (ev.data.action_ev.lines_indices[i] > src)
+                    drop_distance++;
+            }
+            if (drop_distance > 0) {
+                grid_line_moves[line_move_count++] =
+                    (struct Coord){src, drop_distance};
+            }
+        }
+        move_lines = true;
 
-    case CTETRIS_EVENT_LEVEL_UPDATE: {
-        char buf[TEXT_BUFF_LEN];
-        snprintf(buf, sizeof(buf), "%u", ev.data.level);
-        update_ui_text(&txt_level, buf, NULL, NULL);
-        recache_ui_layout();
-        break;
+        return false; // Block for animation
     }
 
-    case CTETRIS_EVENT_LINES_UPDATE: {
+    case CTETRIS_EVENT_HARD_DROP: {
+        // Process stats for Hard Drop
+        struct CTetrisStats s = ev.data.action_ev.stats;
+        int delta = s.score - score;
+        score = s.score;
         char buf[TEXT_BUFF_LEN];
-        snprintf(buf, sizeof(buf), "%u", ev.data.lines);
-        update_ui_text(&txt_lines, buf, NULL, NULL);
-        recache_ui_layout();
-    } break;
+        snprintf(buf, sizeof(buf), "%u", score);
+        update_ui_text(&txt_score, buf, NULL, NULL);
 
-    case CTETRIS_EVENT_COMBO_UPDATE: {
-        char buf[TEXT_BUFF_LEN];
-        snprintf(buf, sizeof(buf), "%ux COMBO", ev.data.combo);
-        bool combo_state = ev.data.combo != 0;
-        update_ui_badge(&badge_combo, buf, NULL, NULL, &combo_state);
-        recache_ui_layout();
-        break;
+        if (delta > 0) {
+            snprintf(buf, sizeof(buf), "+%u", delta);
+            int x = txt_score.bounds.x + txt_score.bounds.width +
+                    POPUP_FONT_SIZE * 0.5f;
+            int y =
+                txt_score.bounds.y +
+                ((txt_score.bounds.height - pp_score.text.bounds.height) / 2);
+            update_ui_popup(&pp_score, buf, &x, &y, &truthy);
+        }
+
+        if (!audio_muted)
+            PlaySound(sfx_thud);
+        trail_set(player_active_shape.shape, player_active_shape.shape.pos,
+                  player_shadow_shape.shape.pos);
+        return false;
     }
 
     case CTETRIS_EVENT_LOCK_CANCEL:
@@ -1054,7 +1148,7 @@ static bool handle_event(struct CTetrisEvent ev) {
     case CTETRIS_EVENT_LOCK_START:
     case CTETRIS_EVENT_LOCK_RESET:
         anim_set_lerp(&player_active_shape.anim, LOCK_FADE_SPEED,
-                      piece_color(player_active_shape.shape.type), COL_SHADOW);
+                      piece_color(player_active_shape.shape.type), COL_NUETRAL);
         break;
 
     case CTETRIS_EVENT_LOCK_DONE:
@@ -1064,14 +1158,25 @@ static bool handle_event(struct CTetrisEvent ev) {
         write_to_ui_grid(player_active_shape.shape);
         return false; // Engine blocked for animation.
 
-    case CTETRIS_EVENT_HARD_DROP:
-        if (!audio_muted)
-            PlaySound(sfx_thud);
-        trail_set(player_active_shape.shape, player_active_shape.shape.pos,
-                  player_shadow_shape.shape.pos);
-        return false; // Engine blocked for animation.
+    case CTETRIS_EVENT_SOFT_DROP: {
+        struct CTetrisStats s = ev.data.action_ev.stats;
+        int delta = s.score - score;
+        score = s.score;
 
-    case CTETRIS_EVENT_SOFT_DROP:
+        char buf[TEXT_BUFF_LEN];
+        snprintf(buf, sizeof(buf), "%u", score);
+        update_ui_text(&txt_score, buf, NULL, NULL);
+
+        if (delta > 0) {
+            snprintf(buf, sizeof(buf), "+%u", delta);
+            int x = txt_score.bounds.x + txt_score.bounds.width +
+                    POPUP_FONT_SIZE * 0.5f;
+            int y =
+                txt_score.bounds.y +
+                ((txt_score.bounds.height - pp_score.text.bounds.height) / 2);
+            update_ui_popup(&pp_score, buf, &x, &y, &truthy);
+        }
+    }
     case CTETRIS_EVENT_SHIFT:
     case CTETRIS_EVENT_ROTATE:
         if (!audio_muted)
@@ -1093,7 +1198,7 @@ static bool handle_event(struct CTetrisEvent ev) {
         if (!curr_shadow_exists) {
             // Fade in animation for new shadow shape.
             anim_set_lerp(&player_shadow_shape.anim, FADE_IN_SPEED, COL_BG_ALT,
-                          COL_SHADOW);
+                          COL_NUETRAL);
             curr_shadow_exists = true;
         }
         break;
@@ -1114,20 +1219,12 @@ static bool handle_event(struct CTetrisEvent ev) {
 /* Asset management */
 
 static void load_assets(void) {
-    int codepoints[99];
-    for (int i = 0; i < 95; i++)
-        codepoints[i] = 32 + i;
-    codepoints[95] = 0xF057E;
-    codepoints[96] = 0xF0581;
-    codepoints[97] = 0xF040A;
-    codepoints[98] = 0xF03e4;
-
-    font_sm = LoadFontFromMemory(".ttf", FONT_TTF, FONT_TTF_LEN,
-                                 FONT_SM_LOAD_SZ, codepoints, 99);
-    font_md = LoadFontFromMemory(".ttf", FONT_TTF, FONT_TTF_LEN,
-                                 FONT_MD_LOAD_SZ, codepoints, 99);
-    font_lg = LoadFontFromMemory(".ttf", FONT_TTF, FONT_TTF_LEN,
-                                 FONT_LG_LOAD_SZ, codepoints, 99);
+    font_sm = LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN,
+                                 FONT_SM_LOAD_SZ, NULL, 0);
+    font_md = LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN,
+                                 FONT_MD_LOAD_SZ, NULL, 0);
+    font_lg = LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN,
+                                 FONT_LG_LOAD_SZ, NULL, 0);
 
     SetTextureFilter(font_sm.texture, TEXTURE_FILTER_POINT);
     SetTextureFilter(font_md.texture, TEXTURE_FILTER_POINT);
@@ -1165,7 +1262,7 @@ static void compute_layout(int logical_w, int logical_h, double dpi_scale) {
     LH_S = logical_h;
 
     FONT_LG_S = (int)(0.04f * LW_S);
-    FONT_MD_S = (int)(0.6f * FONT_LG_S);
+    FONT_MD_S = (int)(0.7f * FONT_LG_S);
     FONT_SM_S = (int)(0.5f * FONT_LG_S);
 
     FONT_SM_LOAD_SZ = SCALE_INT((float)FONT_SM_S, (float)dpi_scale);
@@ -1177,15 +1274,20 @@ static void compute_layout(int logical_w, int logical_h, double dpi_scale) {
     HDR_CON_X_S = 0;
     HDR_CON_Y_S = 0;
     HDR_CON_W_S = split_x;
-    HDR_CON_H_S = TITLE_FONT_SIZE * 2;
+    HDR_CON_H_S = TITLE_FONT_SIZE * 1.5;
 
     GRID_CON_X_S = 0;
     GRID_CON_Y_S = HDR_CON_H_S;
     GRID_CON_W_S = split_x;
     GRID_CON_H_S = logical_h - HDR_CON_H_S;
 
-    CELL_S = GRID_CON_H_S / (ROWS + 2);
+    int cell_h = GRID_CON_H_S / (ROWS + 2);
+    int cell_w = GRID_CON_W_S / COLS;
+    CELL_S = (cell_h < cell_w) ? cell_h : cell_w;
+
     CELL_PAD_S = (int)(CELL_S * 0.05f);
+    if (CELL_PAD_S < 1)
+        CELL_PAD_S = 1;
     PREV_CELL_S = (int)(CELL_S * 0.9f);
 
     GRID_CX_S = GRID_CON_X_S + (GRID_CON_W_S - CELL_S * COLS) / 2;
@@ -1205,6 +1307,14 @@ static void compute_layout(int logical_w, int logical_h, double dpi_scale) {
 
 // Initialize all UI elements to a default state before any rendering.
 static void init_ui_elements(void) {
+    // Dividers
+    init_ui_divider(&div_hdr_bottom, COL_SUBTLE, 1);
+    init_ui_divider(&div_sb_left, COL_SUBTLE, 1);
+    init_ui_divider(&div_sb_1, COL_SUBTLE, 1);
+    init_ui_divider(&div_sb_2, COL_SUBTLE, 1);
+    init_ui_divider(&div_sb_3, COL_SUBTLE, 1);
+    init_ui_divider(&div_sb_stats, COL_SUBTLE, 1);
+
     // Header text
     init_ui_text(&txt_title_accent, get_font_from_sz(TITLE_FONT_SIZE),
                  TITLE_FONT_SIZE, COL_FG);
@@ -1234,34 +1344,35 @@ static void init_ui_elements(void) {
     update_ui_text(&txt_lbl_controls, "CONTROLS", NULL, NULL);
 
     // Sidebar numerics
-    init_ui_text(&txt_score, get_font_from_sz(ACTIVE_STAT_FONT_SIZE),
-                 ACTIVE_STAT_FONT_SIZE, COL_FG);
-    init_ui_text(&txt_hs, get_font_from_sz(RECORD_STAT_FONT_SIZE),
-                 RECORD_STAT_FONT_SIZE, COL_FG_ALT);
-    init_ui_text(&txt_level, get_font_from_sz(ACTIVE_STAT_FONT_SIZE),
-                 ACTIVE_STAT_FONT_SIZE, COL_FG);
-    init_ui_text(&txt_lines, get_font_from_sz(ACTIVE_STAT_FONT_SIZE),
-                 ACTIVE_STAT_FONT_SIZE, COL_FG);
+    init_ui_text(&txt_score, get_font_from_sz(NUMERIC_FONT_SIZE),
+                 NUMERIC_FONT_SIZE, COL_FG);
+    init_ui_text(&txt_hs, get_font_from_sz(NUMERIC_FONT_SIZE),
+                 NUMERIC_FONT_SIZE, COL_FG_ALT);
+    init_ui_text(&txt_level, get_font_from_sz(NUMERIC_FONT_SIZE),
+                 NUMERIC_FONT_SIZE, COL_FG);
+    init_ui_text(&txt_lines, get_font_from_sz(NUMERIC_FONT_SIZE),
+                 NUMERIC_FONT_SIZE, COL_FG);
     update_ui_text(&txt_score, "0", NULL, NULL);
     update_ui_text(&txt_hs, "0", NULL, NULL);
     update_ui_text(&txt_level, "1", NULL, NULL);
     update_ui_text(&txt_lines, "0", NULL, NULL);
 
-    // Badges
-    init_ui_badge(&badge_combo, get_font_from_sz(BADGE_FONT_SIZE),
-                  BADGE_FONT_SIZE, COL_OUTLINE, COL_BG_ALT, COL_FG_ALT);
-    update_ui_badge(&badge_combo, "0x COMBO", NULL, NULL, NULL);
+    // Credit
+    init_ui_text(&txt_credit, get_font_from_sz(CREDIT_FONT_SIZE),
+                 CREDIT_FONT_SIZE, COL_NUETRAL);
+    update_ui_text(&txt_credit, CREDIT_TEXT, NULL, NULL);
 
-    // Dividers
-    init_ui_divider(&div_hdr_bottom, COL_OUTLINE, 1);
-    init_ui_divider(&div_sb_left, COL_OUTLINE, 1);
-    init_ui_divider(&div_sb_1, COL_OUTLINE, 1);
-    init_ui_divider(&div_sb_2, COL_OUTLINE, 1);
-    init_ui_divider(&div_sb_3, COL_OUTLINE, 1);
-    init_ui_divider(&div_sb_stats, COL_OUTLINE, 1);
+    // Popups
+    init_ui_popup(&pp_score, get_font_from_sz(POPUP_FONT_SIZE), POPUP_FONT_SIZE,
+                  COL_S);
+    init_ui_popup(&pp_combo, get_font_from_sz(POPUP_FONT_SIZE), POPUP_FONT_SIZE,
+                  COL_O);
+
+    update_ui_popup(&pp_score, " ", NULL, NULL, NULL);
+    update_ui_popup(&pp_combo, " ", NULL, NULL, NULL);
 
     // Key bindings
-    for (int i = 0; i < KEY_BINDS; i++) {
+    for (int i = 0; i < KB_COUNT; i++) {
         init_ui_keyinfo(&keybindings[i], get_font_from_sz(BADGE_FONT_SIZE),
                         BADGE_FONT_SIZE);
         update_ui_keyinfo(&keybindings[i], keyboard_key_names[i], kb_desc[i],
@@ -1280,8 +1391,8 @@ static void init_state(void) {
     update_ui_text(&txt_level, "1", NULL, NULL);
     update_ui_text(&txt_lines, "0", NULL, NULL);
 
-    bool combo_state = false;
-    update_ui_badge(&badge_combo, "0x COMBO", NULL, NULL, &combo_state);
+    update_ui_popup(&pp_score, NULL, NULL, NULL, &falsy);
+    update_ui_popup(&pp_combo, NULL, NULL, NULL, &falsy);
 
     paused = false;
     curr_shape_exists = false;
@@ -1296,8 +1407,8 @@ static void init_state(void) {
 // Initialize the renderer.
 void renderer_init(void) {
     SetConfigFlags(FLAG_WINDOW_HIGHDPI);
-    // Init dummy window to get monitor dimensions and figure out the window's
-    // logical width and height.
+    // Init dummy window to get monitor dimensions and figure out the
+    // window's logical width and height.
     InitWindow(100, 100, "cTetris");
 
     // Window decoration icon setup.
@@ -1356,7 +1467,6 @@ bool renderer_input(void) {
         paused = !paused;
         update_ui_badge(&keybindings[KB_PAUSE].badge, NULL, NULL, NULL,
                         &paused);
-        recache_ui_layout();
     }
 
     if (IsKeyPressed(KEY_R)) {
@@ -1389,7 +1499,6 @@ bool renderer_input(void) {
         audio_muted = !audio_muted;
         update_ui_badge(&keybindings[KB_MUTE].badge, NULL, NULL, NULL,
                         &audio_muted);
-        recache_ui_layout();
     }
 
     if (paused || block_engine)
@@ -1412,22 +1521,30 @@ bool renderer_input(void) {
     bool right =
         input_state.shift_right_pressed || input_state.shift_right_held;
 
-    update_ui_badge(&keybindings[KB_HARD_DROP].badge, NULL, NULL, NULL,
-                    &input_state.hard_drop_pressed);
+    if (keybindings[KB_HARD_DROP].badge.active != input_state.hard_drop_pressed)
+        update_ui_badge(&keybindings[KB_HARD_DROP].badge, NULL, NULL, NULL,
+                        &input_state.hard_drop_pressed);
 
-    update_ui_badge(&keybindings[KB_MOVE_LEFT].badge, NULL, NULL, NULL, &left);
+    if (keybindings[KB_MOVE_LEFT].badge.active != left)
+        update_ui_badge(&keybindings[KB_MOVE_LEFT].badge, NULL, NULL, NULL,
+                        &left);
 
-    update_ui_badge(&keybindings[KB_MOVE_RIGHT].badge, NULL, NULL, NULL,
-                    &right);
+    if (keybindings[KB_MOVE_RIGHT].badge.active != right)
+        update_ui_badge(&keybindings[KB_MOVE_RIGHT].badge, NULL, NULL, NULL,
+                        &right);
 
-    update_ui_badge(&keybindings[KB_SOFT_DROP].badge, NULL, NULL, NULL,
-                    &input_state.soft_drop_held);
+    if (keybindings[KB_SOFT_DROP].badge.active != input_state.soft_drop_held)
+        update_ui_badge(&keybindings[KB_SOFT_DROP].badge, NULL, NULL, NULL,
+                        &input_state.soft_drop_held);
 
-    update_ui_badge(&keybindings[KB_ROTATE_CW].badge, NULL, NULL, NULL,
-                    &input_state.rotate_cw_pressed);
+    if (keybindings[KB_ROTATE_CW].badge.active != input_state.rotate_cw_pressed)
+        update_ui_badge(&keybindings[KB_ROTATE_CW].badge, NULL, NULL, NULL,
+                        &input_state.rotate_cw_pressed);
 
-    update_ui_badge(&keybindings[KB_ROTATE_ACW].badge, NULL, NULL, NULL,
-                    &input_state.rotate_ccw_pressed);
+    if (keybindings[KB_ROTATE_CCW].badge.active !=
+        input_state.rotate_ccw_pressed)
+        update_ui_badge(&keybindings[KB_ROTATE_CCW].badge, NULL, NULL, NULL,
+                        &input_state.rotate_ccw_pressed);
 
     return true;
 }
@@ -1444,17 +1561,38 @@ void renderer_update(void) {
     if (paused || game_over)
         return;
 
-    // In case the engine is blocked for playing animations then block till all
-    // animations are finished.
+    // In case the engine is blocked for playing animations then block till
+    // all animations are finished.
     if (block_engine) {
         if (grid_anim || (player_active_shape.anim.type != ANIM_NONE) ||
             (trail_anim.type != ANIM_NONE))
             return;
 
+        if (move_lines) {
+            for (int i = 0; i < line_move_count; i++) {
+                int src = grid_line_moves[i].x;
+                int drop = grid_line_moves[i].y;
+                int dst = src + drop;
+
+                for (int c = 0; c < COLS; c++) {
+                    if (ui_grid[src][c].type == N)
+                        continue;
+                    ui_grid[dst][c] = ui_grid[src][c];
+                    anim_set_translate(
+                        &ui_grid[dst][c].anim, LINE_MOVE_SPEED,
+                        (Vector2){0.0f, (float)((src - dst) * CELL_S)},
+                        (Vector2){0.0f, 0.0f});
+                    ui_grid[src][c].type = N;
+                }
+            }
+            move_lines = false;
+            return;
+        }
+
         block_engine = false;
 
-        // This is set to true when the shape locks and set to false when all
-        // animations since shape lock is over.
+        // This is set to true when the shape locks and set to false when
+        // all animations since shape lock is over.
         curr_shape_exists = false;
         curr_shadow_exists = false;
     }
@@ -1487,10 +1625,10 @@ void renderer_render(void) {
 
     draw_ui_grid(dt);
 
-    // stop drawing the active shape and its shadow if the engine reports the
-    // shape has been locked.
+    // stop drawing the active shape and its shadow if the engine reports
+    // the shape has been locked.
     if (curr_shadow_exists)
-        draw_ui_shape(&player_shadow_shape, COL_SHADOW, dt);
+        draw_ui_shape(&player_shadow_shape, COL_NUETRAL, dt);
     if (curr_shape_exists)
         draw_ui_shape(&player_active_shape,
                       piece_color(player_active_shape.shape.type), dt);
@@ -1502,17 +1640,22 @@ void renderer_render(void) {
     draw_preview(dt);
     draw_controls(dt);
 
+    draw_ui_popup(&pp_score, dt);
+    draw_ui_popup(&pp_combo, dt);
+
+    draw_credit();
+
     EndDrawing();
 
     // Theme switch and game over lerp animation update.
     if (theme_switch_t < 1.0f) {
-        theme_switch_t += dt * THEME_T_SPEED;
+        theme_switch_t += dt * THEME_LERP_SPEED;
         if (theme_switch_t > 1.0f)
             theme_switch_t = 1.0f;
     }
 
     if (game_over && game_over_t < 1.0f) {
-        game_over_t += dt * GAMEOVER_T_SPEED;
+        game_over_t += dt * GAMEOVER_LERP_SPEED;
         if (game_over_t > 1.0f)
             game_over_t = 1.0f;
     }
