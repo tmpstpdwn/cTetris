@@ -1,3 +1,5 @@
+/* [ CTETRIS_C ] */
+
 /*
  * To understand how the engine works, start with the enums, structs, global
  * variables and then go straight to the `ctetris_update` fn which is the core
@@ -65,8 +67,6 @@ static struct Shape *shape_bag[N] = {
 
 // Index of the next shape in the shape bag.
 static int shape_bag_next_i = 0;
-
-// Game state variables
 
 // If the shape is airborne then the `engine_state` will be `STATE_DROPPING`.
 // Otherwise `STATE_LOCKING`.
@@ -136,7 +136,7 @@ static int get_line_bonus(uint8_t val);
 static void scoring(struct CTetrisStats *s);
 static void endgame_or_reset(void);
 
-/* [ PUBLIC API FN DEF ] */
+/* [ PUBLIC FN DEF ] */
 
 void ctetris_init(void) {
     srand((unsigned)time(NULL));
@@ -208,7 +208,7 @@ struct CTetrisEvent ctetris_event_pop(void) {
     return ev;
 }
 
-/* [ INTERNAL CORE FN DEF ] */
+/* [ INTERNAL FN DEF ] */
 
 // Push an event to the event queue.
 static void event_push(struct CTetrisEvent ev) {
@@ -346,7 +346,7 @@ static struct Shape get_shadow_shape(struct Shape *shape) {
 //
 // If the rotated orientation causes an immediate collision, a recovery offset
 // (Wall/Floor Kick) is attempted using the worst colliding offset returned by
-// `shape_collides`.
+// `shape_collides` fn.
 //
 // If the shape remains in a collision state even after applying this offset,
 // the entire rotation is cancelled.
@@ -503,7 +503,7 @@ static void handle_new_move(struct FrameContext *ctxt) {
     if (ctxt->moves == 0)
         return;
 
-    // As the there was a move, set a new shadow shape.
+    // As there was a move, set a new shadow shape.
     shadow_shape = get_shadow_shape(&curr_shape);
 
     event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_ACTIVE_SHAPE_UPDATE,
@@ -570,7 +570,8 @@ static bool handle_grounded_shape(bool hard_drop) {
         score += rows_dropped * 2;
         curr_shape.pos = shadow_shape.pos;
 
-        struct CTetrisStats stats = {score, lines, level, 0};
+        struct CTetrisStats stats = {
+            .score = score, .lines = 0, .level = 0, .combo = 0};
         event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_HARD_DROP,
                                          .data.action_ev.stats = stats});
 
@@ -614,7 +615,8 @@ static void handle_airborne_shape(bool soft_drop) {
                    drop_delay)) {
         if (soft_drop) {
             score++;
-            struct CTetrisStats stats = {score, lines, level, 0};
+            struct CTetrisStats stats = {
+                .score = score, .lines = 0, .level = 0, .combo = 0};
             event_push((struct CTetrisEvent){.type = CTETRIS_EVENT_SOFT_DROP,
                                              .data.action_ev.stats = stats});
         }
@@ -658,7 +660,6 @@ static void clear_lines(void) {
     clear_ev.type = CTETRIS_EVENT_LINE_CLEAR;
 
     int write = ROWS - 1;
-
     for (int read = ROWS - 1; read >= 0; read--) {
         bool is_full = true;
         for (int c = 0; c < COLS; c++) {
@@ -681,17 +682,18 @@ static void clear_lines(void) {
         write--;
     }
 
-    clear_ev.data.action_ev.stats.lines = clear_ev.data.action_ev.lines_count;
-    scoring(&clear_ev.data.action_ev.stats);
-
-    if (clear_ev.data.action_ev.stats.lines == 0)
-        return;
-
+    // Clear empty rows at the top after settling the grid.
     for (int r = write; r >= 0; r--) {
         for (int c = 0; c < COLS; c++) {
             grid[r][c] = N;
         }
     }
+
+    clear_ev.data.action_ev.stats.lines = clear_ev.data.action_ev.lines_count;
+    scoring(&clear_ev.data.action_ev.stats);
+
+    if (clear_ev.data.action_ev.stats.lines == 0)
+        return;
 
     event_push(clear_ev);
 }
@@ -731,7 +733,7 @@ static void scoring(struct CTetrisStats *s) {
 
         s->score = score;
         s->lines = lines;
-        s->levels = level;
+        s->level = level;
         s->combo = combo;
 
         combo++;

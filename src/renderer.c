@@ -1,3 +1,5 @@
+/* [ RENDERER_C ] */
+
 /* [ INCLUDES ] */
 
 #include "renderer.h"
@@ -1064,7 +1066,7 @@ static bool handle_event(struct CTetrisEvent ev) {
         int combo_points = CALC_COMBO_POINTS(level, s.combo);
         int score_delta = s.score - score;
         score = s.score;
-        level = s.levels;
+        level = s.level;
         lines = s.lines;
         char buf[TEXT_BUFF_LEN];
         snprintf(buf, sizeof(buf), "%u", score);

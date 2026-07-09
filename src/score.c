@@ -1,3 +1,5 @@
+/* [ SCORE_C ] */
+
 /* [ INCLUDES ] */
 
 #include <stdio.h>

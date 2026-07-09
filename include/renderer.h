@@ -1,8 +1,14 @@
+/* [ RENDERER_H ] */
+
 #ifndef RENDERER_H
 #define RENDERER_H
 
+/* [ INCLUDES ] */
+
 #include <stdbool.h>
 #include <stdint.h>
+
+/* [ FN DCL ] */
 
 // Init and shutdown.
 void renderer_init(void);
@@ -21,3 +27,5 @@ void renderer_set_high_score(uint32_t hs);
 uint32_t renderer_get_high_score(void);
 
 #endif
+
+/* [ END ] */

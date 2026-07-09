@@ -1,3 +1,5 @@
+/* [ ASSETS_C ] */
+
 // This file contains byte-array binary dump of all of the assets ctetris uses.
 
 /* [ INCLUDES ] */

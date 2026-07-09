@@ -1,5 +1,9 @@
+/* [ CTETRIS_H ] */
+
 #ifndef CTETRIS_H
 #define CTETRIS_H
+
+/* [ ABOUT ] */
 
 /**
  *
@@ -21,12 +25,13 @@
  * Input mechanics:
  * - Shift (left/right): Individual moves or held input with delay.
  * - Rotate (CW/CCW): Geometric rotation with wall/floor kick collision.
- * - Soft drop: Accelerated fall (sets the drop interval to 0.05s when active).
+ * - Soft drop: Accelerated fall (sets the drop interval to `SOFT_DROP_DELAY`
+ *   when active).
  * - Hard drop: Instant teleportation to shadow position, locks immediately.
  *
  * Landing and locking:
  * - After landing (when not hard dropped), a lock timer of 0.5s runs. When it
- * expires, the shape auto-locks.
+ *   expires, the shape auto-locks.
  * - The lock timer is reset by further shift or rotate moves.
  * - If a move after landing puts the shape airborne, lock timer will be
  *   cancelled and further moves will reset the drop timer, pausing the downward
@@ -51,8 +56,9 @@
  *   - 2 lines: 300
  *   - 3 lines: 500
  *   - 4 lines: 800
- *   - Maintaining a combo / line-clear chain (50 points per successive line
- *     clear without breaking the chain).
+ *   - Maintaining a combo / line-clear chain; Score gain for combo is given by
+ *     the formula:
+ *       level * COMBO_BONUS * combo.
  *   - Level is dependent on the lines cleared and is given by the formula:
  *     (lines / 10) + 1
  *
@@ -60,8 +66,8 @@
  *
  * 1. Call ctetris_init() once to set up the game state.
  * 2. Each frame:
- *    - Call ctetris_input_push(state) to push input to the engine.
- *    - Call ctetris_update(delta_time) to process the input and step the engine
+ *    - Call ctetris_input_push() to push input to the engine.
+ *    - Call ctetris_update() to process the input and step the engine
  *      forward.
  *    - Poll ctetris_event_pop() in a loop until `CTETRIS_EVENT_NONE` to
  *      retrieve events happened in that update tick.
@@ -70,9 +76,13 @@
  *
  */
 
+/* [ INCLUDES ] */
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/* [ DEFINES ] */
 
 // Tetris grid dimensions.
 #define ROWS 20
@@ -84,8 +94,10 @@
 
 #define SOFT_DROP_DELAY 0.05f // Drop delay (seconds).
 
-#define SHIFT_DELAY_INITIAL 0.2f // Delay before auto-repeat kicks in (seconds).
-#define SHIFT_DELAY_REPEAT 0.1f  // Delay for shift auto-repeat (seconds).
+// Delay before shift auto-repeat kicks in (seconds).
+#define SHIFT_DELAY_INITIAL 0.2f
+// Delay for shift auto-repeat (seconds).
+#define SHIFT_DELAY_REPEAT 0.1f
 
 // Number of moves allowed after a shape has landed before it is automatically
 // hard dropped and locked.
@@ -95,14 +107,15 @@
 
 // Score bonus multiplier for maintaining a consecutive line clear chain.
 #define COMBO_BONUS 50
+// Combo reward formula macro.
 #define CALC_COMBO_POINTS(level, combo) ((level) * COMBO_BONUS * (combo))
 
-/* [ CORE STRUCTS AND ENUMS ] */
+/* [ STRUCTS AND ENUMS ] */
 
 // Coord struct is used to represent shape offsets and grid coordinates.
 struct Coord {
-    int x;
-    int y;
+    int8_t x;
+    int8_t y;
 };
 
 // Enum representing all 7 standard shapes.
@@ -112,7 +125,7 @@ enum ShapeType { O, L, J, I, T, S, Z, N };
 
 // This is the cTetris shape struct.
 // A shape is essentially a bunch of offsets set relative to a central position.
-// The offsets are defined such that the shape pivot sits at (0, 0).
+// The offsets are defined such that the shape's pivot sits at (0, 0).
 struct Shape {
     enum ShapeType type;
     struct Coord
@@ -163,7 +176,7 @@ enum CTetrisEventType {
 };
 
 struct CTetrisStats {
-    uint32_t score, lines, levels, combo;
+    uint32_t score, lines, level, combo;
 };
 
 // This struct represents an engine event.
@@ -172,11 +185,12 @@ struct CTetrisEvent {
     enum CTetrisEventType type;
     union {
         struct Shape shape; // Used by CTETRIS_EVENT_*_SHAPE_UPDATE.
-        // Used by CTETRIS_EVENT_LINE_(CLEAR, MOVE).
+        // CTETRIS_EVENT_(SOFT_DROP, HARD_DROP, LINE_CLEAR).
         struct {
-            // Populated whenever stats change.
-            // CTETRIS_EVENT_(SOFT_DROP, HARD_DROP, LINE_CLEAR).
-            struct CTetrisStats stats;
+            // SOFT_DROP/HARD_DROP: updates score only.
+            // LINE_CLEAR: updates score, lines, level and combo.    struct
+            CTetrisStats stats;
+            // CTETRIS_EVENT_LINE_CLEAR.
             uint8_t lines_indices[4]; // At max only 4 lines can be cleared.
             uint8_t lines_count;      // cleared lines count.
         } action_ev;
@@ -184,11 +198,11 @@ struct CTetrisEvent {
     } data;
 };
 
-/* [ PUBLIC API FN DCL ] */
+/* [ FN DCL ] */
 
 /* Sets up the internal Tetris grid and initializes game state variables.
  * This function completely resets engine state and starts a new game.
- * It must be executed called at least once before calling any other ctetris_*
+ * It must be called at least once before calling any other ctetris_*
  * APIs to prevent acting on uninitialized garbage data.
  */
 void ctetris_init(void);
@@ -200,9 +214,9 @@ void ctetris_init(void);
 void ctetris_input_push(struct InputState input_state);
 
 /* Steps the engine simulation state forward and populates internal event queue.
- * 'delta' represents the elapsed execution frame-time in seconds. Internal
- * timers are incremented with this value. Passing 0.0 or not calling this
- * fn at all freezes the simulation, useful for pausing the engine/game.
+ * 'delta' represents the elapsed time since last `ctetris_update` in seconds.
+ * Internal timers are incremented with this value. Passing 0.0 or not calling
+ * this fn at all freezes the simulation, useful for pausing the engine/game.
  */
 void ctetris_update(double delta);
 
@@ -210,10 +224,12 @@ void ctetris_update(double delta);
  * event queue. Events are returned sequentially in FIFO order. If the queue is
  * empty then an event of type CTETRIS_EVENT_NONE is returned.
  *
- * NOTE: The Engine can push multiple events in one tick.
+ * NOTE: The Engine can push multiple events in one `ctetris_update` tick.
  * Read ctetris.c to understand engine's event mechanism and which all events
- * CAN be batched together.
+ * CAN be batched together when pushed.
  */
 struct CTetrisEvent ctetris_event_pop(void);
 
 #endif
+
+/* [ END ] */

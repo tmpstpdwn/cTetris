@@ -1,3 +1,4 @@
+/* [ MAIN_C ] */
 /*
  * Things handled by main.c:
  * - Loading and saving high score.

@@ -1,7 +1,13 @@
+/* [ ASSETS_H ] */
+
 #ifndef ASSETS_H
 #define ASSETS_H
 
+/* [ INCLUDES ] */
+
 #include <stdint.h>
+
+/* [ VARIABLES ] */
 
 // Length of respective byte arrays.
 extern const uint32_t ICON_PNG_LEN;
@@ -18,3 +24,5 @@ extern const uint8_t SFX_CLICK_WAV[];
 extern const uint8_t SFX_CLACK_WAV[];
 
 #endif
+
+/* [ END ] */
