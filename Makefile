@@ -1,7 +1,7 @@
 CC = gcc
-CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99
-LDFLAGS = -Llibs -lraylib
-LDLIBS = -lm -lpthread -ldl -lrt
+CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99 -flto
+LDFLAGS = -Llibs -flto -s
+LDLIBS = -lraylib -lm
 
 ifdef DEBUG
     CFLAGS := -Iinclude -Wall -pedantic -Wextra -g -O0 -DDEBUG \
@@ -21,9 +21,10 @@ help:
 	@echo "make what???"
 	@echo ""
 	@echo "make linux      - Compile native Linux binary"
-	@echo "make windows    - Cross-compile Windows executable (.exe)"
+	@echo "make package    - Package for linux"
 	@echo "make install    - Install cTetris to local paths (linux)"
 	@echo "make uninstall  - Uninstall cTetris from local paths (linux)"
+	@echo "make windows    - Cross-compile Windows executable (.exe)"
 	@echo "make clean      - Remove build artifacts"
 
 %.o: %.c
@@ -32,11 +33,24 @@ help:
 linux: $(OBJ)
 	$(CC) $(OBJ) -o $(OUT) $(LDFLAGS) $(LDLIBS)
 
+package: linux
+	rm -rf cTetris-linux-x86_64
+	mkdir -p cTetris-linux-x86_64
+
+	cp cTetris cTetris-linux-x86_64/
+	cp cTetris.desktop cTetris-linux-x86_64/
+	cp cTetris_256.png cTetris-linux-x86_64/cTetris.png
+
+	tar -czf cTetris-linux-x86_64.tar.gz cTetris-linux-x86_64
+	rm -rf cTetris-linux-x86_64
+
+	@echo "Created cTetris-linux-x86_64.tar.gz"
+
 windows: CC = x86_64-w64-mingw32-gcc
 windows: OUT = cTetris.exe
-windows: CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99
-windows: LDFLAGS = -Llib_win -lraylib
-windows: LDLIBS = -lopengl32 -lgdi32 -lwinmm -lws2_32 -Wl,--defsym=stat64i32=_stat64i32 -mwindows
+windows: CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99 -flto
+windows: LDFLAGS = -Llib_win -flto -s
+windows: LDLIBS = -lraylib -lwinmm -Wl,--defsym=stat64i32=_stat64i32 -mwindows
 windows: $(OBJ) resource.o
 	$(CC) $(OBJ) resource.o -o $(OUT) $(LDFLAGS) $(LDLIBS)
 
@@ -76,4 +90,4 @@ uninstall:
 clean:
 	rm -f cTetris cTetris_debug cTetris.exe resource.o $(OBJ)
 
-.PHONY: help linux windows install uninstall clean
+.PHONY: help linux windows package install uninstall clean
