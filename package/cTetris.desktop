@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=cTetris
-Comment=A simple, minimal Tetris clone
-Exec=cTetris
-Icon=cTetris
-Terminal=false
-Categories=Game;ArcadeGame;
-Keywords=tetris;game;arcade;puzzle;
