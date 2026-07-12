@@ -34,7 +34,7 @@ linux: $(OBJ)
 
 windows: CC = x86_64-w64-mingw32-gcc
 windows: OUT = cTetris.exe
-windows: CFLAGS = -Iinclude
+windows: CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99
 windows: LDFLAGS = -Llib_win -lraylib
 windows: LDLIBS = -lopengl32 -lgdi32 -lwinmm -lws2_32 -Wl,--defsym=stat64i32=_stat64i32 -mwindows
 windows: $(OBJ) resource.o
