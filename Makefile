@@ -1,11 +1,19 @@
 CC = gcc
-CFLAGS = -Iinclude
+CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99
 LDFLAGS = -Llibs -lraylib
 LDLIBS = -lm -lpthread -ldl -lrt
 
+ifdef DEBUG
+    CFLAGS := -Iinclude -Wall -pedantic -Wextra -g -O0 -DDEBUG \
+              -fsanitize=address -fno-omit-frame-pointer -std=c99
+    LDFLAGS += -fsanitize=address
+    OUT = cTetris_debug
+else
+    OUT = cTetris
+endif
+
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:.c=.o)
-OUT = cTetris
 
 .DEFAULT_GOAL := help
 
@@ -66,6 +74,6 @@ uninstall:
 	@echo "Uninstall complete."
 
 clean:
-	rm -f cTetris cTetris.exe resource.o $(OBJ)
+	rm -f cTetris cTetris_debug cTetris.exe resource.o $(OBJ)
 
 .PHONY: help linux windows install uninstall clean

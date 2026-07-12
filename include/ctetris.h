@@ -7,10 +7,6 @@
 
 /**
  *
- * CTETRIS ENGINE
- *
- * ABOUT:
- *
  * This is a simple and minimal Tetris engine implementing only the bare minimum
  * of what I think constitutes a clean, lightweight, and fun Tetris game.
  *
@@ -19,25 +15,25 @@
  * - The grid is 20×10, shapes are spawned at the top of the grid and drops down
  *   at an interval given by the formula:
  *   pow(0.8 - ((level - 1) * 0.007), level - 1)
- * - The drop interval cannot become shorter than the soft-drop interval
- *   (0.05s).
+ * - The drop interval cannot become shorter than the soft-drop interval.
  *
  * Input mechanics:
  * - Shift (left/right): Individual moves or held input with delay.
- * - Rotate (CW/CCW): Geometric rotation with wall/floor kick collision.
+ * - Rotate (left/right): Geometric rotation with wall/floor kick collision.
  * - Soft drop: Accelerated fall (sets the drop interval to `SOFT_DROP_DELAY`
  *   when active).
- * - Hard drop: Instant teleportation to shadow position, locks immediately.
+ * - Hard drop: Instant teleportation to where the shape is supposed to land,
+ *   locks immediately.
  *
  * Landing and locking:
- * - After landing (when not hard dropped), a lock timer of 0.5s runs. When it
+ * - After landing (when not hard dropped), a lock timer runs. When it
  *   expires, the shape auto-locks.
  * - The lock timer is reset by further shift or rotate moves.
  * - If a move after landing puts the shape airborne, lock timer will be
  *   cancelled and further moves will reset the drop timer, pausing the downward
  *   drop mechanism.
  * - Once landed, all moves, whether the shape is grounded or airborne, are
- *   counted against a move budget of 15. When exhausted, a forced hard
+ *   counted against a move budget, which when exhausted, a forced hard
  *   drop occurs.
  * - The move count can be reset and the drop mechanism restored to its default
  *   behavior, by letting the shape fall to a row it has never reached before.
@@ -71,7 +67,9 @@
  *      forward.
  *    - Poll ctetris_event_pop() in a loop until `CTETRIS_EVENT_NONE` to
  *      retrieve events happened in that update tick.
- *    - Render based on events.
+ *    - Query the engine using ctetris_shape_proj_get() and
+ *      ctetris_shape_next_get().
+ *    - Render based on events and queries.
  * 3. On game-over, call ctetris_init() again to restart.
  *
  */
@@ -123,7 +121,7 @@ enum ShapeType { O, L, J, I, T, S, Z, N };
 // N serves as both the value for "No Shape" and the count of valid
 // shape types (7).
 
-// This is the cTetris shape struct.
+// This is the shape struct.
 // A shape is essentially a bunch of offsets set relative to a central position.
 // The offsets are defined such that the shape's pivot sits at (0, 0).
 struct Shape {
@@ -133,16 +131,16 @@ struct Shape {
     struct Coord pos;           // Position of the shape within the grid.
 };
 
-// This struct represents the input state for a single frame.
+// This struct represents the input state passed on to the engine.
 // This is how the renderer communicates input events to the engine.
 struct InputState {
-    bool rotate_cw_pressed;
-    bool rotate_ccw_pressed;
-
     bool shift_left_pressed;
     bool shift_left_held;
     bool shift_right_pressed;
     bool shift_right_held;
+
+    bool rotate_right_pressed;
+    bool rotate_left_pressed;
 
     bool soft_drop_held;
     bool hard_drop_pressed;
@@ -150,15 +148,12 @@ struct InputState {
 
 // CTetrisEventType lists all the event types the engine can signal
 // back out to the renderer.
-// The main use case for this event architecture is to enable clean
-// renderer-side animations, and sound effects.
+// This can be used on the renderer side to implement animations and audio.
 enum CTetrisEventType {
     CTETRIS_EVENT_NONE,
-    CTETRIS_EVENT_NEW_GAME,
+    CTETRIS_EVENT_NEW_SHAPE,
 
-    CTETRIS_EVENT_ACTIVE_SHAPE_UPDATE,
-    CTETRIS_EVENT_SHADOW_SHAPE_UPDATE,
-    CTETRIS_EVENT_NEXT_SHAPE_UPDATE,
+    CTETRIS_EVENT_DROP,
 
     CTETRIS_EVENT_HARD_DROP,
     CTETRIS_EVENT_SOFT_DROP,
@@ -171,45 +166,42 @@ enum CTetrisEventType {
     CTETRIS_EVENT_LOCK_DONE,
 
     CTETRIS_EVENT_LINE_CLEAR,
-
-    CTETRIS_EVENT_GAME_OVER
-};
-
-struct CTetrisStats {
-    uint32_t score, lines, level, combo;
 };
 
 // This struct represents an engine event.
 // This is how the engine communicates with the renderer.
 struct CTetrisEvent {
     enum CTetrisEventType type;
-    union {
-        struct Shape shape; // Used by CTETRIS_EVENT_*_SHAPE_UPDATE.
-        // CTETRIS_EVENT_(SOFT_DROP, HARD_DROP, LINE_CLEAR).
-        struct {
-            // SOFT_DROP/HARD_DROP: updates score only.
-            // LINE_CLEAR: updates score, lines, level and combo.    struct
-            CTetrisStats stats;
-            // CTETRIS_EVENT_LINE_CLEAR.
-            uint8_t lines_indices[4]; // At max only 4 lines can be cleared.
-            uint8_t lines_count;      // cleared lines count.
-        } action_ev;
-
-    } data;
+    // Populated when the active shape is set or changes.
+    // Used by CTETRIS_EVENT_(NEW_SHAPE, DROP, HARD_DROP, SOFT_DROP, ROTATE,
+    // SHIFT).
+    struct Shape shape;
+    // Set to true by CTETRIS_EVENT_NEW_SHAPE when the engine goes inactive on
+    // game over.
+    bool engine_inactive;
+    // Used by CTETRIS_EVENT_(HARD_DROP, SOFT_DROP, LINE_CLEAR).
+    // CTETRIS_EVENT_(HARD_DROP, SOFT_DROP) only sets score.
+    // CTETRIS_EVENT_LINE_CLEAR sets score, lines, level, combo.
+    uint32_t score;
+    uint8_t lines, level, combo;
+    // CTETRIS_EVENT_LINE_CLEAR.
+    // Stores indices of lines cleared [0 - ROWS).
+    uint8_t lines_cleared_indices[4]; // At max only 4 lines can be cleared.
+    uint8_t lines_cleared_count;
 };
 
 /* [ FN DCL ] */
 
 /* Sets up the internal Tetris grid and initializes game state variables.
- * This function completely resets engine state and starts a new game.
- * It must be called at least once before calling any other ctetris_*
- * APIs to prevent acting on uninitialized garbage data.
+ * This fn completely resets engine state and starts a new game.
+ * An active engine session starts with a call to `ctetris_init` fn and ends
+ * with a CTETRIS_EVENT_NEW_SHAPE event with `engine_inactive` set to true.
+ * To start or restart the engine `ctetris_init` should be called.
  */
 void ctetris_init(void);
 
-/* Pushes the current frame's user inputs to the engine.
- * This should be called with valid input every frame before calling
- * that frame's ctetris_update.
+/* Pushes inputs to the engine.
+ * This should be called with valid input before each `ctetris_update` fn call.
  */
 void ctetris_input_push(struct InputState input_state);
 
@@ -229,6 +221,22 @@ void ctetris_update(double delta);
  * CAN be batched together when pushed.
  */
 struct CTetrisEvent ctetris_event_pop(void);
+
+// Get the projection shape (Shadow / Ghost shape) for the active shape.
+// Which is pretty much a shape with position set to where the active shape is
+// supposed to land.
+struct Shape ctetris_shape_proj_get(void);
+
+// Get the next shape.
+struct Shape ctetris_shape_next_get(void);
+
+/* NOTE: When the engine session is inactive, `ctetris_update` and
+ * `ctetris_input_push` fn calls will not affect the engine.
+ * `ctetris_event_pop` will return events already queued before
+ * the engine went inactive or CTETRIS_EVENT_NONE if empty.
+ * `ctetris_shape_*` fns will return zeroed out shape struct
+ * with type set to N.
+ */
 
 #endif
 

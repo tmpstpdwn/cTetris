@@ -18,22 +18,23 @@
 #define APP_DIR_NAME "ctetris"
 #define SAVE_FILE_NAME "ctetris.hs"
 
+#define PATH_BUF_SIZE 1024
+
 /* [ FN DEF ] */
 
 // Get path to the score file based on the os.
 static void get_score_path(char *buf, size_t len) {
+    char dir[PATH_BUF_SIZE - 20];
 #if defined(_WIN32)
     const char *base = getenv("LOCALAPPDATA");
     if (!base)
         base = ".";
-    char dir[512];
     snprintf(dir, sizeof(dir), "%s\\%s", base, APP_DIR_NAME);
     CreateDirectoryA(dir, NULL); // No-op if already exists
     snprintf(buf, len, "%s\\%s", dir, SAVE_FILE_NAME);
 
 #else // On unix like ones.
     const char *xdg = getenv("XDG_DATA_HOME");
-    char dir[512];
     if (xdg && xdg[0]) {
         snprintf(dir, sizeof(dir), "%s/%s", xdg, APP_DIR_NAME);
     } else {
@@ -50,7 +51,7 @@ static void get_score_path(char *buf, size_t len) {
 // Return saved score.
 // If not saved previously return 0.
 uint32_t score_load(void) {
-    char path[512];
+    char path[PATH_BUF_SIZE];
     get_score_path(path, sizeof(path));
     FILE *fp = fopen(path, "rb");
     if (!fp)
@@ -66,7 +67,7 @@ uint32_t score_load(void) {
 
 // Save the given score on to the disk.
 void score_save(uint32_t score) {
-    char path[512];
+    char path[PATH_BUF_SIZE];
     get_score_path(path, sizeof(path));
     FILE *fp = fopen(path, "wb");
     if (!fp)
