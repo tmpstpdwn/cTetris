@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99 -flto
-LDFLAGS = -Llibs -flto -s
-LDLIBS = -lraylib -lm
+LDFLAGS = -Llib -flto -s
+LDLIBS = -lX11 -lm -lraylib
 
 ifdef DEBUG
     CFLAGS := -Iinclude -Wall -pedantic -Wextra -g -O0 -DDEBUG \

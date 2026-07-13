@@ -2,6 +2,10 @@
 
 /* [ INCLUDES ] */
 
+#ifndef _GLFW_WAYLAND
+#define _GLFW_WAYLAND
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 
@@ -1542,16 +1546,28 @@ void renderer_init(void) {
     uint64_t mon = GetCurrentMonitor();
     InitAudioDevice();
 
+    double dpi_scale = GetWindowScaleDPI().x;
+
     // Window height and width is set to be 80% of monitor height.
-    uint64_t final_dim = GetMonitorHeight(mon) * 0.8f;
+    uint64_t window_size = GetMonitorHeight(mon) * 0.8f;
+    // Compute logical dimensions.
+    uint64_t window_size_logical = (double)window_size / dpi_scale;
 
     // derive layout variables from the now computed window dimensions.
-    ui_layout_compute(final_dim, final_dim, GetWindowScaleDPI().x);
+    ui_layout_compute(window_size_logical, window_size_logical, dpi_scale);
 
-    SetWindowSize(LW_S, LH_S); // Resize.
+    SetWindowSize(window_size_logical, window_size_logical); // Resize.
     // Center the window on the monitor.
-    SetWindowPosition((GetMonitorWidth(mon) - LW_S) / 2,
-                      (GetMonitorHeight(mon) - LH_S) / 2);
+    SetWindowPosition((GetMonitorWidth(mon) - window_size) / 2,
+                      (GetMonitorHeight(mon) - window_size) / 2);
+
+    printf("Monitor Height: %d\n", GetMonitorHeight(mon));
+    printf("Screen Height: %d\n", GetScreenHeight());
+    printf("Render Height: %d\n", GetRenderHeight());
+
+    Vector2 dpi = GetWindowScaleDPI();
+    printf("DPI Scale: %.2f\n", dpi.y);
+
     SetTargetFPS(FPS);
     SetExitKey(KEY_NULL);
 
