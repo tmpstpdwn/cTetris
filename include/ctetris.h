@@ -3,9 +3,11 @@
 #ifndef CTETRIS_H
 #define CTETRIS_H
 
-/* [ ABOUT ] */
-
 /**
+ * CTETRIS ENGINE
+ * --------------
+ *
+ * ABOUT:
  *
  * This is a simple and minimal Tetris engine implementing only the bare minimum
  * of what I think constitutes a clean, lightweight, and fun Tetris game.
@@ -60,6 +62,10 @@
  *
  * BASIC USAGE:
  *
+ * An active engine session starts with a call to `ctetris_init` fn and ends
+ * with a CTETRIS_EVENT_NEW_SHAPE event with `engine_inactive` set to true
+ * (see `struct CTetrisEvent`).
+ *
  * 1. Call ctetris_init() once to set up the game state.
  * 2. Each frame:
  *    - Call ctetris_input_push() to push input to the engine.
@@ -70,14 +76,14 @@
  *    - Query the engine using ctetris_shape_proj_get() and
  *      ctetris_shape_next_get().
  *    - Render based on events and queries.
- * 3. On game-over, call ctetris_init() again to restart.
+ * 3. Once the engine session ends (game over), call ctetris_init() to start a
+ *    new session (restart the game).
  *
  */
 
 /* [ INCLUDES ] */
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 /* [ DEFINES ] */
@@ -148,7 +154,6 @@ struct InputState {
 
 // CTetrisEventType lists all the event types the engine can signal
 // back out to the renderer.
-// This can be used on the renderer side to implement animations and audio.
 enum CTetrisEventType {
     CTETRIS_EVENT_NONE,
     CTETRIS_EVENT_NEW_SHAPE,
@@ -193,10 +198,7 @@ struct CTetrisEvent {
 /* [ FN DCL ] */
 
 /* Sets up the internal Tetris grid and initializes game state variables.
- * This fn completely resets engine state and starts a new game.
- * An active engine session starts with a call to `ctetris_init` fn and ends
- * with a CTETRIS_EVENT_NEW_SHAPE event with `engine_inactive` set to true.
- * To start or restart the engine `ctetris_init` should be called.
+ * This fn completely initializes / resets engine state and starts a new game.
  */
 void ctetris_init(void);
 

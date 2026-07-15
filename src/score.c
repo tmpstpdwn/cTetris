@@ -33,7 +33,7 @@ static void get_score_path(char *buf, size_t len) {
     CreateDirectoryA(dir, NULL); // No-op if already exists
     snprintf(buf, len, "%s\\%s", dir, SAVE_FILE_NAME);
 
-#else // On unix like ones.
+#else // Linux.
     const char *xdg = getenv("XDG_DATA_HOME");
     if (xdg && xdg[0]) {
         snprintf(dir, sizeof(dir), "%s/%s", xdg, APP_DIR_NAME);

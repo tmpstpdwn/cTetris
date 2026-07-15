@@ -15,6 +15,8 @@ void renderer_init(void);
 void renderer_shutdown(void);
 
 // Core.
+
+// The following 3 fns are to be called in the order they are listed.
 bool renderer_input(void); // Returns false signaling game exit.
 void renderer_update(void);
 void renderer_render(void);

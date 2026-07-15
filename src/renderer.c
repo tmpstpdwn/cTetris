@@ -2,10 +2,6 @@
 
 /* [ INCLUDES ] */
 
-#ifndef _GLFW_WAYLAND
-#define _GLFW_WAYLAND
-#endif
-
 #include <stdint.h>
 #include <stdio.h>
 
@@ -32,17 +28,17 @@
 
 #define TEXT_BUFF_LEN 20
 
-#define PREVIEW_GRID_SIZE 4
+#define NEXT_GRID_SIZE 4
 
 // Font size for text elements.
-#define TITLE_FONT_SIZE FONT_LG_S
-#define CREDIT_FONT_SIZE FONT_SM_S
-#define LABEL_FONT_SIZE FONT_MD_S
-#define NUMERIC_FONT_SIZE FONT_LG_S
-#define POPUP_FONT_SIZE FONT_MD_S
-#define BADGE_FONT_SIZE FONT_SM_S
+#define TITLE_FONT_SIZE FONT_LG
+#define CREDIT_FONT_SIZE FONT_SM
+#define LABEL_FONT_SIZE FONT_MD
+#define NUMERIC_FONT_SIZE FONT_LG
+#define POPUP_FONT_SIZE FONT_MD
+#define BADGE_FONT_SIZE FONT_SM
 
-// Speeds for animations.
+// Speed for animations.
 #define SHAPE_FADE_IN_SPEED 5.0f
 #define SHAPE_LOCK_FADE_OUT_SPEED (1.0f / SHAPE_LOCK_DELAY)
 #define SHAPE_FLASH_SPEED 10.0f
@@ -55,7 +51,7 @@
 #define POPUP_FADE_IN_SPEED 15.0f
 #define POPUP_FADE_OUT_SPEED 1.0f
 
-#define BADGE_LERP_SPEED 10.0f
+#define BADGE_STATE_LERP_SPEED 10.0f
 #define THEME_LERP_SPEED 5.0f
 #define GAMEOVER_LERP_SPEED 5.0f
 
@@ -167,8 +163,8 @@ struct UIBadge {
     uint64_t pad_v;
 };
 
-// Represents a single keyinfo, which just a badge containing key name and its
-// description displayed side by side.
+// Represents a single keyinfo, which is just a badge containing key name
+// displayed side by side with its description.
 struct UIKeyInfo {
     struct UIBadge ui_badge;
     struct UIText ui_text;
@@ -188,40 +184,40 @@ struct UIShape {
 
 /* [ VARIABLES ] */
 
-// Layout contrainsts derived at runtime wrt the dimensions of the monitor it
-// was spawned on. The "_S" in the below variable names stands for "SCALED".
+// Layout constraints derived at runtime wrt the dimensions of the monitor it
+// was spawned on.
 
-// Size of main, preview grid cell.
-static uint64_t CELL_S, PREV_CELL_S;
-// Padding for main, preview grid cell.
-static uint64_t CELL_PAD_S, PREV_CELL_PAD_S;
+// Size of main, next grid cell.
+static uint64_t MAIN_CELL, NEXT_CELL;
+// Padding for main, next grid cell.
+static uint64_t MAIN_CELL_PAD, NEXT_CELL_PAD;
 
-// Header, grid and sidebar container origins.
-static uint64_t HDR_CON_X_S, HDR_CON_Y_S, GRID_CON_X_S, GRID_CON_Y_S,
-    SB_CON_X_S, SB_CON_Y_S;
+// Header, main grid and sidebar container origins.
+static uint64_t HDR_CON_X, HDR_CON_Y, MAIN_GRID_CON_X, MAIN_GRID_CON_Y,
+    SB_CON_X, SB_CON_Y;
 
-// Actual grid content origins for main and preview grid.
-static uint64_t GRID_CX_S, GRID_CY_S;
-static uint64_t PREV_GRID_CX_S, PREV_GRID_CY_S;
+// Actual grid content origins for main and next grid.
+static uint64_t MAIN_GRID_CX, MAIN_GRID_CY;
+static uint64_t NEXT_GRID_CX, NEXT_GRID_CY;
 
 // Header container width and height.
-static uint64_t HDR_CON_W_S, HDR_CON_H_S;
-// Same as above but for the grid.
-static uint64_t GRID_CON_W_S, GRID_CON_H_S;
+static uint64_t HDR_CON_W, HDR_CON_H;
+// Same as above but for the main grid.
+static uint64_t MAIN_GRID_CON_W, MAIN_GRID_CON_H;
 // Same as above but for the sidebar.
-static uint64_t SB_CON_W_S, SB_CON_H_S;
+static uint64_t SB_CON_W, SB_CON_H;
 
 // Padding for sidebar.
-static uint64_t SB_CON_PAD_S;
+static uint64_t SB_CON_PAD;
 
 // Padding, Margin used for items in the sidebar.
-static uint64_t SB_SEC_PAD_S, SB_LABEL_MG_S, SB_KEYINFO_MG_S;
+static uint64_t SB_SEC_PAD, SB_LABEL_MG, SB_KEYINFO_MG;
 
-// Logical width and height of the window.
-static uint64_t W_S, H_S;
+// width and height of the window.
+static uint64_t W, H;
 
 // Font sizes for small, medium and large fonts.
-static uint64_t FONT_SM_S, FONT_MD_S, FONT_LG_S;
+static uint64_t FONT_SM, FONT_MD, FONT_LG;
 
 // Assets.
 static Font font_sm, font_md, font_lg;
@@ -271,7 +267,7 @@ static enum ColorScheme prev_scheme = SCHEME_DARK;
 static float theme_switch_t = 1.0f;
 static float game_over_t = 0.0f;
 
-static struct UIKeyInfo keybindings[KB_COUNT];
+static struct UIKeyInfo ui_key_info_list[KB_COUNT];
 
 // Key names for keyboard.
 static const char *keyboard_key_names[KB_COUNT] = {
@@ -314,23 +310,19 @@ static struct UIText txt_credit;
 // Popup for score and combo.
 static struct UIPopup pp_score, pp_combo;
 
-// The visual ui grid which will be used for drawing.
-static struct UIGridCell ui_grid[ROWS][COLS];
-static bool grid_anim = false; // Is the grid being animated?
+// The visual ui main grid which will be used for drawing.
+static struct UIGridCell ui_main_grid[ROWS][COLS];
+static bool ui_main_grid_animating = false; // Is the main grid being animated?
+// Set to true when the active shape locks. Used to write the active shape on to
+// the visual ui main grid once the lock animation is done.
+static bool ui_main_grid_write_pending = false;
 
-// Players current shape.
+// Player's current shape.
 static struct UIShape player_active_shape;
 // Ghost projection / Shadow of the current active shape.
 static struct UIShape player_shadow_shape;
-// Preview of the next shape.
-static struct UIShape player_prev_shape;
-
-// Set to true when the active shape locks. Used to write the active shape on to
-// the visual grid once the lock animation is done.
-static bool write_to_grid = false;
-// used to not draw the active shape once the shape locks until and new shape is
-// spawned.
-static bool shape_exists = false;
+// Player's next shape.
+static struct UIShape player_next_shape;
 
 // Hard drop trail animation.
 static struct Anim trail_anim;
@@ -346,9 +338,10 @@ static uint8_t trail_rect_count;
 
 // Used to animate line move after line clear animation.
 // `(struct Coord){line_index_to_move, move_distance (in cells)}`
-static struct Coord grid_line_moves[ROWS];
+static struct Coord line_moves[ROWS];
 static uint8_t line_move_count; // How many lines to move.
-static bool move_lines = false;
+// Is there a line move pending to be done and animated?
+static bool line_move_pending = false;
 
 // Game stats.
 static uint32_t score, high_score;
@@ -359,9 +352,6 @@ static bool paused = false;
 static bool audio_muted = false;
 static bool block_engine = false;
 static bool game_over = false;
-
-static const bool truthy = true;
-static const bool falsy = false;
 
 /* [ FN DEF ] */
 
@@ -401,10 +391,10 @@ static enum ColorIndex piece_color(enum ShapeType t) {
     }
 }
 
-static Font *get_font_from_sz(uint64_t font_size) {
-    if (font_size == FONT_LG_S)
+static Font *get_font(uint64_t font_size) {
+    if (font_size == FONT_LG)
         return &font_lg;
-    else if (font_size == FONT_MD_S)
+    else if (font_size == FONT_MD)
         return &font_md;
     else
         return &font_sm;
@@ -453,25 +443,25 @@ static void anim_update(struct Anim *anim, float dt) {
     }
 }
 
-/* Grid utilities */
+/* Main Grid utilities */
 
-static void ui_grid_init(void) {
+static void ui_main_grid_init(void) {
     for (uint8_t r = 0; r < ROWS; r++) {
         for (uint8_t c = 0; c < COLS; c++) {
-            ui_grid[r][c].type = N;
-            anim_set_none(&ui_grid[r][c].anim);
+            ui_main_grid[r][c].type = N;
+            anim_set_none(&ui_main_grid[r][c].anim);
         }
     }
-    grid_anim = false;
+    ui_main_grid_animating = false;
 }
 
-static void ui_grid_write_shape(struct Shape shape) {
+static void ui_main_grid_shape_write(struct Shape shape) {
     for (uint8_t i = 0; i < OFFSETS_COUNT; i++) {
         // Here the assumption is that the shape is valid and entirely within
-        // the grid.
+        // the main grid.
         uint8_t gc = shape.pos.x + shape.offsets[i].x;
         uint8_t gr = shape.pos.y + shape.offsets[i].y;
-        ui_grid[gr][gc].type = shape.type;
+        ui_main_grid[gr][gc].type = shape.type;
     }
 }
 
@@ -481,6 +471,7 @@ static void ui_divider_init(struct UIDivider *ui_divider, enum ColorIndex color,
                             uint64_t thickness) {
     if (!ui_divider)
         return;
+
     ui_divider->color = color;
     ui_divider->thickness = (thickness < 1) ? 1 : thickness;
 }
@@ -508,6 +499,7 @@ static void ui_popup_init(struct UIPopup *ui_popup, Font *font,
                           uint64_t font_size, enum ColorIndex col) {
     if (!ui_popup || !font)
         return;
+
     ui_popup->active = false;
     ui_popup->fading_out = false;
     ui_text_init(&ui_popup->ui_text, font, font_size, col);
@@ -536,6 +528,7 @@ static void ui_keyinfo_init(struct UIKeyInfo *ui_key_info, Font *font,
                             uint64_t font_size) {
     if (!ui_key_info || !font)
         return;
+
     ui_badge_init(&ui_key_info->ui_badge, font, font_size, COL_SUBTLE,
                   COL_BG_ALT, COL_FG_ALT);
     ui_text_init(&ui_key_info->ui_text, font, font_size, COL_FG_ALT);
@@ -598,6 +591,9 @@ static void ui_popup_update(struct UIPopup *ui_popup, const char *text,
                           ui_popup->ui_text.color);
             ui_popup->ui_text.anim.progress = 1;
             ui_popup->fading_out = false;
+        } else if (!*active) {
+            ui_popup->fading_out = false;
+            anim_set_none(&ui_popup->ui_text.anim);
         }
         ui_popup->active = *active;
     }
@@ -653,12 +649,12 @@ static void ui_badge_update(struct UIBadge *ui_badge, const char *text,
     }
 
     ui_badge->border_col = border_to;
-    anim_set_lerp(&ui_badge->border_anim, BADGE_LERP_SPEED, border_from,
+    anim_set_lerp(&ui_badge->border_anim, BADGE_STATE_LERP_SPEED, border_from,
                   border_to);
     ui_badge->bg_col = bg_to;
-    anim_set_lerp(&ui_badge->bg_anim, BADGE_LERP_SPEED, bg_from, bg_to);
+    anim_set_lerp(&ui_badge->bg_anim, BADGE_STATE_LERP_SPEED, bg_from, bg_to);
     ui_badge->ui_text.color = text_to;
-    anim_set_lerp(&ui_badge->ui_text.anim, BADGE_LERP_SPEED, text_from,
+    anim_set_lerp(&ui_badge->ui_text.anim, BADGE_STATE_LERP_SPEED, text_from,
                   text_to);
 }
 
@@ -785,8 +781,8 @@ static void header_cache(void) {
                            txt_title_accent.font_spacing;
     uint64_t hdr_title_h = txt_title_accent.bounds.height;
 
-    uint64_t hdr_title_x = HDR_CON_X_S + (HDR_CON_W_S - hdr_title_w) / 2;
-    uint64_t hdr_title_y = HDR_CON_Y_S + (HDR_CON_H_S - hdr_title_h) / 2;
+    uint64_t hdr_title_x = HDR_CON_X + (HDR_CON_W - hdr_title_w) / 2;
+    uint64_t hdr_title_y = HDR_CON_Y + (HDR_CON_H - hdr_title_h) / 2;
 
     ui_text_update(&txt_title_accent, NULL, &hdr_title_x, &hdr_title_y);
 
@@ -800,104 +796,104 @@ static uint64_t sb_score_cache(uint64_t x, uint64_t y) {
     ui_text_update(&txt_lbl_score, NULL, &x, &y);
 
     uint64_t best_lbl_x =
-        SB_CON_X_S + SB_CON_W_S - SB_CON_PAD_S - txt_lbl_best.bounds.width;
+        SB_CON_X + SB_CON_W - SB_CON_PAD - txt_lbl_best.bounds.width;
     ui_text_update(&txt_lbl_best, NULL, &best_lbl_x, &y);
 
-    y += txt_lbl_score.bounds.height + SB_LABEL_MG_S;
+    y += txt_lbl_score.bounds.height + SB_LABEL_MG;
 
     ui_text_update(&txt_score, NULL, &x, &y);
 
     uint64_t best_val_x =
-        SB_CON_X_S + SB_CON_W_S - SB_CON_PAD_S - txt_hs.bounds.width;
+        SB_CON_X + SB_CON_W - SB_CON_PAD - txt_hs.bounds.width;
 
     ui_text_update(&txt_hs, NULL, &best_val_x, &y);
 
-    y += txt_hs.bounds.height + SB_SEC_PAD_S;
+    y += txt_hs.bounds.height + SB_SEC_PAD;
 
-    ui_divider_update(&div_sb_1, x, y, W_S - SB_CON_PAD_S, y);
+    ui_divider_update(&div_sb_1, x, y, W - SB_CON_PAD, y);
 
     return y + 1;
 }
 
 static uint64_t sb_level_lines_cache(uint64_t x, uint64_t y) {
-    y += SB_SEC_PAD_S;
+    y += SB_SEC_PAD;
 
-    uint64_t sb_cw = SB_CON_W_S - SB_CON_PAD_S * 2;
+    uint64_t sb_cw = SB_CON_W - SB_CON_PAD * 2;
     uint64_t split = x + sb_cw / 2;
-    uint64_t lines_x = split + SB_CON_PAD_S;
+    uint64_t lines_x = split + SB_CON_PAD;
 
     ui_text_update(&txt_lbl_level, NULL, &x, &y);
     ui_text_update(&txt_lbl_lines, NULL, &lines_x, &y);
 
-    y += txt_lbl_level.bounds.height + SB_LABEL_MG_S;
+    y += txt_lbl_level.bounds.height + SB_LABEL_MG;
     ui_text_update(&txt_level, NULL, &x, &y);
     ui_text_update(&txt_lines, NULL, &lines_x, &y);
 
     ui_divider_update(&div_sb_level_lines, split,
-                      y - txt_lbl_level.bounds.height - SB_LABEL_MG_S, split,
+                      y - txt_lbl_level.bounds.height - SB_LABEL_MG, split,
                       y + txt_level.bounds.height);
 
-    y += txt_level.bounds.height + SB_SEC_PAD_S;
+    y += txt_level.bounds.height + SB_SEC_PAD;
 
-    ui_divider_update(&div_sb_2, x, y, W_S - SB_CON_PAD_S, y);
+    ui_divider_update(&div_sb_2, x, y, W - SB_CON_PAD, y);
 
     return y + 1;
 }
 
-static uint64_t sb_preview_cache(uint64_t x, uint64_t y) {
-    y += SB_SEC_PAD_S;
+static uint64_t sb_next_cache(uint64_t x, uint64_t y) {
+    y += SB_SEC_PAD;
 
     ui_text_update(&txt_lbl_next, NULL, &x, &y);
 
-    y += txt_lbl_next.bounds.height + SB_LABEL_MG_S;
+    y += txt_lbl_next.bounds.height + SB_LABEL_MG;
 
-    PREV_GRID_CX_S = x;
-    PREV_GRID_CY_S = y;
+    NEXT_GRID_CX = x;
+    NEXT_GRID_CY = y;
 
-    y += PREVIEW_GRID_SIZE * PREV_CELL_S + SB_SEC_PAD_S;
-    ui_divider_update(&div_sb_3, x, y, W_S - SB_CON_PAD_S, y);
+    y += NEXT_GRID_SIZE * NEXT_CELL + SB_SEC_PAD;
+    ui_divider_update(&div_sb_3, x, y, W - SB_CON_PAD, y);
 
     return y + 1;
 }
 
 static uint64_t sb_controls_cache(uint64_t x, uint64_t y) {
-    y += SB_SEC_PAD_S;
+    y += SB_SEC_PAD;
 
     ui_text_update(&txt_lbl_controls, NULL, &x, &y);
-    y += txt_lbl_controls.bounds.height + SB_LABEL_MG_S;
+    y += txt_lbl_controls.bounds.height + SB_LABEL_MG;
 
     for (uint64_t i = 0; i < KB_COUNT; i++) {
-        ui_keyinfo_update(&keybindings[i], keyboard_key_names[i], kb_desc[i],
-                          &x, &y);
-        y += keybindings[i].ui_badge.bounds.height + SB_KEYINFO_MG_S;
+        ui_keyinfo_update(&ui_key_info_list[i], keyboard_key_names[i],
+                          kb_desc[i], &x, &y);
+        y += ui_key_info_list[i].ui_badge.bounds.height + SB_KEYINFO_MG;
     }
 
-    return y - SB_KEYINFO_MG_S + SB_SEC_PAD_S;
+    return y - SB_KEYINFO_MG + SB_SEC_PAD;
 }
 
 static void credit_cache(void) {
     uint64_t credit_x =
-        SB_CON_X_S + SB_CON_W_S / 2 - (uint64_t)txt_credit.bounds.width / 2;
+        SB_CON_X + SB_CON_W / 2 - (uint64_t)txt_credit.bounds.width / 2;
     uint64_t credit_y =
-        SB_CON_Y_S + SB_CON_H_S - txt_credit.bounds.height - SB_CON_PAD_S;
+        SB_CON_Y + SB_CON_H - txt_credit.bounds.height - SB_CON_PAD;
     ui_text_update(&txt_credit, NULL, &credit_x, &credit_y);
 }
 
 static void ui_elements_cache(void) {
-    ui_divider_update(&div_hdr_bottom, HDR_CON_X_S, HDR_CON_Y_S + HDR_CON_H_S,
-                      HDR_CON_X_S + HDR_CON_W_S, HDR_CON_Y_S + HDR_CON_H_S);
-    ui_divider_update(&div_sb_left, SB_CON_X_S, SB_CON_Y_S, SB_CON_X_S,
-                      SB_CON_Y_S + SB_CON_H_S);
+    ui_divider_update(&div_hdr_bottom, HDR_CON_X, HDR_CON_Y + HDR_CON_H,
+                      HDR_CON_X + HDR_CON_W, HDR_CON_Y + HDR_CON_H);
+    ui_divider_update(&div_sb_left, SB_CON_X, SB_CON_Y, SB_CON_X,
+                      SB_CON_Y + SB_CON_H);
 
     header_cache();
 
     // Sidebar content origin.
-    uint64_t sb_cx = SB_CON_X_S + SB_CON_PAD_S;
-    uint64_t sb_cy = SB_CON_Y_S + SB_CON_PAD_S;
+    uint64_t sb_cx = SB_CON_X + SB_CON_PAD;
+    uint64_t sb_cy = SB_CON_Y + SB_CON_PAD;
 
     sb_cy = sb_score_cache(sb_cx, sb_cy);
     sb_cy = sb_level_lines_cache(sb_cx, sb_cy);
-    sb_cy = sb_preview_cache(sb_cx, sb_cy);
+    sb_cy = sb_next_cache(sb_cx, sb_cy);
     sb_cy = sb_controls_cache(sb_cx, sb_cy);
 
     credit_cache();
@@ -905,35 +901,35 @@ static void ui_elements_cache(void) {
 
 /* Draw UI components */
 
-static void ui_grid_draw(float dt) {
-    Rectangle border_rect = {GRID_CX_S, GRID_CY_S, CELL_S * COLS,
-                             CELL_S * ROWS};
+static void ui_main_grid_draw(float dt) {
+    Rectangle border_rect = {MAIN_GRID_CX, MAIN_GRID_CY, MAIN_CELL * COLS,
+                             MAIN_CELL * ROWS};
     ui_rect_draw(border_rect, COL_SUBTLE, true, NULL);
 
     bool still_animating = false;
     for (uint8_t r = 0; r < ROWS; r++) {
         for (uint8_t c = 0; c < COLS; c++) {
             Rectangle cell_rect = {
-                GRID_CX_S + c * CELL_S + CELL_PAD_S,
-                GRID_CY_S + r * CELL_S + CELL_PAD_S,
-                CELL_S - CELL_PAD_S * 2,
-                CELL_S - CELL_PAD_S * 2,
+                MAIN_GRID_CX + c * MAIN_CELL + MAIN_CELL_PAD,
+                MAIN_GRID_CY + r * MAIN_CELL + MAIN_CELL_PAD,
+                MAIN_CELL - MAIN_CELL_PAD * 2,
+                MAIN_CELL - MAIN_CELL_PAD * 2,
             };
             ui_rect_draw(cell_rect, COL_BG_ALT, false, NULL);
 
             // Draw the cell if it isnt empty or has an active animation.
-            if (ui_grid[r][c].type != N ||
-                ui_grid[r][c].anim.type != ANIM_NONE) {
-                ui_rect_draw(cell_rect, piece_color(ui_grid[r][c].type), false,
-                             &ui_grid[r][c].anim);
-                anim_update(&ui_grid[r][c].anim, dt);
+            if (ui_main_grid[r][c].type != N ||
+                ui_main_grid[r][c].anim.type != ANIM_NONE) {
+                ui_rect_draw(cell_rect, piece_color(ui_main_grid[r][c].type),
+                             false, &ui_main_grid[r][c].anim);
+                anim_update(&ui_main_grid[r][c].anim, dt);
             }
 
             still_animating =
-                still_animating || (ui_grid[r][c].anim.type != ANIM_NONE);
+                still_animating || (ui_main_grid[r][c].anim.type != ANIM_NONE);
         }
     }
-    grid_anim = still_animating;
+    ui_main_grid_animating = still_animating;
 }
 
 static void ui_shape_draw(struct UIShape *ui_shape, enum ColorIndex col_ind,
@@ -946,8 +942,8 @@ static void ui_shape_draw(struct UIShape *ui_shape, enum ColorIndex col_ind,
         uint8_t gc = ui_shape->shape.pos.x + ui_shape->shape.offsets[i].x;
         uint8_t gr = ui_shape->shape.pos.y + ui_shape->shape.offsets[i].y;
         Rectangle r = {
-            origin_x + gc * cell_size + CELL_PAD_S,
-            origin_y + gr * cell_size + CELL_PAD_S,
+            origin_x + gc * cell_size + cell_pad,
+            origin_y + gr * cell_size + cell_pad,
             cell_size - cell_pad * 2,
             cell_size - cell_pad * 2,
         };
@@ -980,31 +976,30 @@ static void sb_level_lines_draw(float dt) {
     ui_divider_draw(&div_sb_2);
 }
 
-static void sb_preview_draw(float dt) {
+static void sb_next_draw(float dt) {
     ui_text_draw(&txt_lbl_next, dt);
 
-    uint64_t prev_grid_dim = PREVIEW_GRID_SIZE * PREV_CELL_S;
-    Rectangle prev_grid_rect = {PREV_GRID_CX_S, PREV_GRID_CY_S, prev_grid_dim,
-                                prev_grid_dim};
-    ui_rect_draw(prev_grid_rect, COL_SUBTLE, true, NULL);
+    uint64_t next_grid_dim = NEXT_GRID_SIZE * NEXT_CELL;
+    Rectangle next_grid_rect = {NEXT_GRID_CX, NEXT_GRID_CY, next_grid_dim,
+                                next_grid_dim};
+    ui_rect_draw(next_grid_rect, COL_SUBTLE, true, NULL);
 
-    // Draw preview grid.
-    for (uint8_t r = 0; r < PREVIEW_GRID_SIZE; r++) {
-        for (uint8_t c = 0; c < PREVIEW_GRID_SIZE; c++) {
+    // Draw next grid.
+    for (uint8_t r = 0; r < NEXT_GRID_SIZE; r++) {
+        for (uint8_t c = 0; c < NEXT_GRID_SIZE; c++) {
             Rectangle cell_r = {
-                PREV_GRID_CX_S + c * PREV_CELL_S + CELL_PAD_S,
-                PREV_GRID_CY_S + r * PREV_CELL_S + CELL_PAD_S,
-                PREV_CELL_S - CELL_PAD_S * 2,
-                PREV_CELL_S - CELL_PAD_S * 2,
+                NEXT_GRID_CX + c * NEXT_CELL + NEXT_CELL_PAD,
+                NEXT_GRID_CY + r * NEXT_CELL + NEXT_CELL_PAD,
+                NEXT_CELL - NEXT_CELL_PAD * 2,
+                NEXT_CELL - NEXT_CELL_PAD * 2,
             };
             ui_rect_draw(cell_r, COL_BG_ALT, false, NULL);
         }
     }
 
-    // Draw preview shape.
-    ui_shape_draw(&player_prev_shape, piece_color(player_prev_shape.shape.type),
-                  PREV_GRID_CX_S, PREV_GRID_CY_S, PREV_CELL_S, PREV_CELL_PAD_S,
-                  dt);
+    // Draw next shape.
+    ui_shape_draw(&player_next_shape, piece_color(player_next_shape.shape.type),
+                  NEXT_GRID_CX, NEXT_GRID_CY, NEXT_CELL, NEXT_CELL_PAD, dt);
 
     ui_divider_draw(&div_sb_3);
 }
@@ -1013,8 +1008,8 @@ static void sb_controls_draw(float dt) {
     ui_text_draw(&txt_lbl_controls, dt);
 
     for (uint8_t i = 0; i < KB_COUNT; i++) {
-        ui_badge_draw(&keybindings[i].ui_badge, dt);
-        ui_text_draw(&keybindings[i].ui_text, dt);
+        ui_badge_draw(&ui_key_info_list[i].ui_badge, dt);
+        ui_text_draw(&ui_key_info_list[i].ui_text, dt);
     }
 }
 
@@ -1026,8 +1021,8 @@ static void credit_draw(void) { ui_text_draw(&txt_credit, 0.0f); }
 static void hard_drop_trail_set(struct Shape shape, struct Coord from,
                                 struct Coord to) {
     /* The objective here is to use 2 arrays of size OFFSETS_COUNT.
-     * One stores grid coordinates of the given shape's top most cells
-     * when it is at `from`. The other stores grid coordinates of the given
+     * One stores main grid coordinates of the given shape's top most cells
+     * when it is at `from`. The other stores main grid coordinates of the given
      * shape's top most cells when it is at `to`. Then rectangles are drawn
      * bw them. The number of rectangles to be drawn are the number of
      * top most cells that shape has in that particular orientation.
@@ -1038,7 +1033,7 @@ static void hard_drop_trail_set(struct Shape shape, struct Coord from,
     trail_rect_count = 0;
 
     // Computes minimum x, to be used as index for the first cell in the 2
-    // arrays mensioned above.
+    // arrays mentioned above.
     uint8_t min_x = shape.offsets[0].x + shape.pos.x;
     for (uint8_t i = 0; i < OFFSETS_COUNT; i++) {
         uint8_t new_x = shape.offsets[i].x + from.x;
@@ -1080,10 +1075,10 @@ static void hard_drop_trail_set(struct Shape shape, struct Coord from,
 
     // Setting up the rectangles bw `starts` and `ends` (The trail).
     for (uint8_t i = 0; i < trail_rect_count; i++) {
-        float rx = GRID_CX_S + starts[i].x * CELL_S;
-        float ry = GRID_CY_S + starts[i].y * CELL_S;
-        float ry2 = GRID_CY_S + ends[i].y * CELL_S;
-        trail_rects[i] = (Rectangle){rx, ry, CELL_S, ry2 - ry};
+        float rx = MAIN_GRID_CX + starts[i].x * MAIN_CELL;
+        float ry = MAIN_GRID_CY + starts[i].y * MAIN_CELL;
+        float ry2 = MAIN_GRID_CY + ends[i].y * MAIN_CELL;
+        trail_rects[i] = (Rectangle){rx, ry, MAIN_CELL, ry2 - ry};
     }
 
     // Setting animation.
@@ -1104,7 +1099,7 @@ static void hard_drop_trail_draw(float dt) {
 
 /* Event handler */
 
-static void show_score_popup(unsigned int delta_score) {
+static void score_popup_show(unsigned int delta_score) {
     if (delta_score == 0)
         return;
     char buf[TEXT_BUFF_LEN];
@@ -1114,12 +1109,12 @@ static void show_score_popup(unsigned int delta_score) {
     uint64_t y =
         txt_score.bounds.y +
         ((txt_score.bounds.height - pp_score.ui_text.bounds.height) / 2);
-    ui_popup_update(&pp_score, buf, &x, &y, &truthy);
+    ui_popup_update(&pp_score, buf, &x, &y, &(bool){true});
 }
 
-static void show_combo_popup(unsigned int combo_count,
+static void combo_popup_show(unsigned int combo_count,
                              unsigned int combo_points) {
-    if (combo_points == 0)
+    if (combo_count == 0 || combo_points == 0)
         return;
     char buf[TEXT_BUFF_LEN];
     snprintf(buf, sizeof(buf), "x%u +%u", combo_count, combo_points);
@@ -1131,15 +1126,13 @@ static void show_combo_popup(unsigned int combo_count,
     if (pp_score.active)
         x += pp_score.ui_text.bounds.width +
              pp_combo.ui_text.bounds.height * 0.5f;
-    ui_popup_update(&pp_combo, buf, &x, &y, &truthy);
+    ui_popup_update(&pp_combo, buf, &x, &y, &(bool){true});
 }
 
-static bool handle_event_new_shape(struct CTetrisEvent ev) {
-    shape_exists = true;
-
+static bool event_new_shape_handle(struct CTetrisEvent ev) {
     player_active_shape.shape = ev.shape;
     player_shadow_shape.shape = ctetris_shape_proj_get();
-    player_prev_shape.shape = ctetris_shape_next_get();
+    player_next_shape.shape = ctetris_shape_next_get();
 
     // If the engine went inactive with the new shape, meaning game ended:
     if (ev.engine_inactive) {
@@ -1148,8 +1141,8 @@ static bool handle_event_new_shape(struct CTetrisEvent ev) {
         return false;
     }
 
-    // Center preview shape inside preview grid.
-    struct Shape *s = &player_prev_shape.shape;
+    // Center next shape inside next grid.
+    struct Shape *s = &player_next_shape.shape;
     int8_t min_x = s->offsets[0].x, max_x = s->offsets[0].x;
     int8_t min_y = s->offsets[0].y, max_y = s->offsets[0].y;
     for (uint8_t i = 1; i < OFFSETS_COUNT; i++) {
@@ -1162,21 +1155,21 @@ static bool handle_event_new_shape(struct CTetrisEvent ev) {
         if (s->offsets[i].y > max_y)
             max_y = s->offsets[i].y;
     }
-    s->pos.x = (PREVIEW_GRID_SIZE - (max_x - min_x + 1)) / 2 - min_x;
-    s->pos.y = (PREVIEW_GRID_SIZE - (max_y - min_y + 1)) / 2 - min_y;
+    s->pos.x = (NEXT_GRID_SIZE - (max_x - min_x + 1)) / 2 - min_x;
+    s->pos.y = (NEXT_GRID_SIZE - (max_y - min_y + 1)) / 2 - min_y;
 
     // Set shape fade in animations.
     anim_set_lerp(&player_active_shape.anim, SHAPE_FADE_IN_SPEED, COL_BG_ALT,
                   piece_color(player_active_shape.shape.type));
     anim_set_lerp(&player_shadow_shape.anim, SHAPE_FADE_IN_SPEED, COL_BG_ALT,
                   COL_NEUTRAL);
-    anim_set_lerp(&player_prev_shape.anim, SHAPE_FADE_IN_SPEED, COL_BG_ALT,
-                  piece_color(player_prev_shape.shape.type));
+    anim_set_lerp(&player_next_shape.anim, SHAPE_FADE_IN_SPEED, COL_BG_ALT,
+                  piece_color(player_next_shape.shape.type));
 
     return true;
 }
 
-static void handle_event_soft_drop(struct CTetrisEvent ev) {
+static void event_soft_drop_handle(struct CTetrisEvent ev) {
     player_active_shape.shape = ev.shape;
     uint32_t delta = ev.score - score;
     score = ev.score;
@@ -1185,13 +1178,13 @@ static void handle_event_soft_drop(struct CTetrisEvent ev) {
     snprintf(buf, sizeof(buf), "%u", score);
     ui_text_update(&txt_score, buf, NULL, NULL);
 
-    show_score_popup(delta);
+    score_popup_show(delta);
 
     if (!audio_muted)
         PlaySound(sfx_clack);
 }
 
-static void handle_event_shift_rotate(struct CTetrisEvent ev) {
+static void event_shift_rotate_handle(struct CTetrisEvent ev) {
     player_active_shape.shape = ev.shape;
     player_shadow_shape.shape = ctetris_shape_proj_get();
 
@@ -1199,7 +1192,7 @@ static void handle_event_shift_rotate(struct CTetrisEvent ev) {
         PlaySound(sfx_clack);
 }
 
-static bool handle_event_hard_drop(struct CTetrisEvent ev) {
+static bool event_hard_drop_handle(struct CTetrisEvent ev) {
     uint32_t delta = ev.score - score;
     score = ev.score;
 
@@ -1207,7 +1200,7 @@ static bool handle_event_hard_drop(struct CTetrisEvent ev) {
     snprintf(buf, sizeof(buf), "%u", score);
     ui_text_update(&txt_score, buf, NULL, NULL);
 
-    show_score_popup(delta);
+    score_popup_show(delta);
     hard_drop_trail_set(player_active_shape.shape,
                         player_active_shape.shape.pos,
                         player_shadow_shape.shape.pos);
@@ -1220,7 +1213,7 @@ static bool handle_event_hard_drop(struct CTetrisEvent ev) {
     return false;
 }
 
-static bool handle_event_line_clear(struct CTetrisEvent ev) {
+static bool event_line_clear_handle(struct CTetrisEvent ev) {
     uint8_t combo_points = CALC_COMBO_POINTS(level, ev.combo);
     uint32_t score_delta = ev.score - score;
     score = ev.score;
@@ -1236,16 +1229,16 @@ static bool handle_event_line_clear(struct CTetrisEvent ev) {
     ui_text_update(&txt_lines, buf, NULL, NULL);
 
     // Score / Combo popups
-    show_score_popup(score_delta - combo_points);
-    show_combo_popup(ev.combo, combo_points);
+    score_popup_show(score_delta - combo_points);
+    combo_popup_show(ev.combo, combo_points);
 
     // Fade out cleared lines
     for (uint8_t i = 0; i < ev.lines_cleared_count; i++) {
         uint8_t row = ev.lines_cleared_indices[i];
         for (uint8_t c = 0; c < COLS; c++) {
-            anim_set_lerp(&ui_grid[row][c].anim, LINE_FADE_OUT_SPEED,
-                          piece_color(ui_grid[row][c].type), COL_BG_ALT);
-            ui_grid[row][c].type = N;
+            anim_set_lerp(&ui_main_grid[row][c].anim, LINE_FADE_OUT_SPEED,
+                          piece_color(ui_main_grid[row][c].type), COL_BG_ALT);
+            ui_main_grid[row][c].type = N;
         }
     }
 
@@ -1262,18 +1255,18 @@ static bool handle_event_line_clear(struct CTetrisEvent ev) {
         if (drop_distance > 0) {
             bool empty = true;
             for (uint8_t c = 0; c < COLS; c++) {
-                if (ui_grid[src][c].type != N) {
+                if (ui_main_grid[src][c].type != N) {
                     empty = false;
                     break;
                 }
             }
             if (!empty) {
                 uint8_t dst = src + drop_distance;
-                grid_line_moves[line_move_count++] = (struct Coord){src, dst};
+                line_moves[line_move_count++] = (struct Coord){src, dst};
             }
         }
     }
-    move_lines = true;
+    line_move_pending = true;
 
     return false;
 }
@@ -1281,26 +1274,26 @@ static bool handle_event_line_clear(struct CTetrisEvent ev) {
 // Handle the given engine event. returns false if the engine should be
 // blocked.
 // Main event handler.
-static bool handle_event(struct CTetrisEvent ev) {
+static bool event_handle(struct CTetrisEvent ev) {
     switch (ev.type) {
     case CTETRIS_EVENT_NEW_SHAPE:
-        return handle_event_new_shape(ev);
+        return event_new_shape_handle(ev);
 
     case CTETRIS_EVENT_DROP:
         player_active_shape.shape = ev.shape;
         break;
 
     case CTETRIS_EVENT_SOFT_DROP:
-        handle_event_soft_drop(ev);
+        event_soft_drop_handle(ev);
         break;
 
     case CTETRIS_EVENT_SHIFT:
     case CTETRIS_EVENT_ROTATE:
-        handle_event_shift_rotate(ev);
+        event_shift_rotate_handle(ev);
         break;
 
     case CTETRIS_EVENT_HARD_DROP:
-        return handle_event_hard_drop(ev);
+        return event_hard_drop_handle(ev);
 
     case CTETRIS_EVENT_LOCK_START:
     case CTETRIS_EVENT_LOCK_RESET:
@@ -1316,11 +1309,11 @@ static bool handle_event(struct CTetrisEvent ev) {
         if (!audio_muted)
             PlaySound(sfx_click);
         anim_set_flash(&player_active_shape.anim, SHAPE_FLASH_SPEED);
-        write_to_grid = true;
+        ui_main_grid_write_pending = true;
         return false;
 
     case CTETRIS_EVENT_LINE_CLEAR:
-        return handle_event_line_clear(ev);
+        return event_line_clear_handle(ev);
 
     default:
         break;
@@ -1333,11 +1326,11 @@ static bool handle_event(struct CTetrisEvent ev) {
 
 static void assets_load(void) {
     font_sm =
-        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_SM_S, NULL, 0);
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_SM, NULL, 0);
     font_md =
-        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_MD_S, NULL, 0);
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_MD, NULL, 0);
     font_lg =
-        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_LG_S, NULL, 0);
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_LG, NULL, 0);
 
     SetTextureFilter(font_sm.texture, TEXTURE_FILTER_POINT);
     SetTextureFilter(font_md.texture, TEXTURE_FILTER_POINT);
@@ -1371,50 +1364,50 @@ static void assets_unload(void) {
 /* UI Core */
 
 static void ui_layout_compute(uint64_t window_w, uint64_t window_h) {
-    W_S = window_w;
-    H_S = window_h;
+    W = window_w;
+    H = window_h;
 
-    FONT_LG_S = 0.04f * H_S;
-    FONT_MD_S = 0.7f * FONT_LG_S;
-    FONT_SM_S = 0.5f * FONT_LG_S;
+    FONT_LG = 0.04f * H;
+    FONT_MD = 0.7f * FONT_LG;
+    FONT_SM = 0.5f * FONT_LG;
 
     uint64_t split_x = window_w * SPLIT_AT_PCT;
 
-    HDR_CON_X_S = 0;
-    HDR_CON_Y_S = 0;
-    HDR_CON_W_S = split_x;
-    HDR_CON_H_S = TITLE_FONT_SIZE * 1.5;
+    HDR_CON_X = 0;
+    HDR_CON_Y = 0;
+    HDR_CON_W = split_x;
+    HDR_CON_H = TITLE_FONT_SIZE * 1.5;
 
-    GRID_CON_X_S = 0;
-    GRID_CON_Y_S = HDR_CON_H_S;
-    GRID_CON_W_S = split_x;
-    GRID_CON_H_S = window_h - HDR_CON_H_S;
+    MAIN_GRID_CON_X = 0;
+    MAIN_GRID_CON_Y = HDR_CON_H;
+    MAIN_GRID_CON_W = split_x;
+    MAIN_GRID_CON_H = window_h - HDR_CON_H;
 
-    uint64_t cell_h = GRID_CON_H_S / (ROWS + 2);
-    uint64_t cell_w = GRID_CON_W_S / COLS;
-    CELL_S = (cell_h < cell_w) ? cell_h : cell_w;
-    CELL_PAD_S = CELL_S * 0.05f;
-    if (CELL_PAD_S < 1)
-        CELL_PAD_S = 1;
+    uint64_t cell_h = MAIN_GRID_CON_H / (ROWS + 2);
+    uint64_t cell_w = MAIN_GRID_CON_W / COLS;
+    MAIN_CELL = (cell_h < cell_w) ? cell_h : cell_w;
+    MAIN_CELL_PAD = MAIN_CELL * 0.05f;
+    if (MAIN_CELL_PAD < 1)
+        MAIN_CELL_PAD = 1;
 
-    PREV_CELL_S = CELL_S * 0.9f;
-    PREV_CELL_PAD_S = CELL_PAD_S * 0.9f;
-    if (PREV_CELL_PAD_S < 1)
-        PREV_CELL_PAD_S = 1;
+    NEXT_CELL = MAIN_CELL * 0.9f;
+    NEXT_CELL_PAD = MAIN_CELL_PAD * 0.9f;
+    if (NEXT_CELL_PAD < 1)
+        NEXT_CELL_PAD = 1;
 
-    GRID_CX_S = GRID_CON_X_S + (GRID_CON_W_S - CELL_S * COLS) / 2;
-    GRID_CY_S = GRID_CON_Y_S + (GRID_CON_H_S - CELL_S * ROWS) / 2;
+    MAIN_GRID_CX = MAIN_GRID_CON_X + (MAIN_GRID_CON_W - MAIN_CELL * COLS) / 2;
+    MAIN_GRID_CY = MAIN_GRID_CON_Y + (MAIN_GRID_CON_H - MAIN_CELL * ROWS) / 2;
 
-    SB_CON_X_S = split_x;
-    SB_CON_Y_S = 0;
-    SB_CON_W_S = window_w - split_x;
-    SB_CON_H_S = window_h;
+    SB_CON_X = split_x;
+    SB_CON_Y = 0;
+    SB_CON_W = window_w - split_x;
+    SB_CON_H = window_h;
 
-    SB_CON_PAD_S = 0.04f * SB_CON_W_S;
+    SB_CON_PAD = 0.04f * SB_CON_W;
 
-    SB_SEC_PAD_S = LABEL_FONT_SIZE;
-    SB_LABEL_MG_S = LABEL_FONT_SIZE * 0.5;
-    SB_KEYINFO_MG_S = SB_LABEL_MG_S * 0.5;
+    SB_SEC_PAD = LABEL_FONT_SIZE;
+    SB_LABEL_MG = LABEL_FONT_SIZE * 0.5;
+    SB_KEYINFO_MG = SB_LABEL_MG * 0.5;
 }
 
 // Initialize all UI elements to a default state.
@@ -1428,26 +1421,26 @@ static void ui_elements_init(void) {
     ui_divider_init(&div_sb_level_lines, COL_SUBTLE, 1);
 
     // Header text
-    ui_text_init(&txt_title_accent, get_font_from_sz(TITLE_FONT_SIZE),
-                 TITLE_FONT_SIZE, COL_FG);
-    ui_text_init(&txt_title_dim, get_font_from_sz(TITLE_FONT_SIZE),
-                 TITLE_FONT_SIZE, COL_FG_ALT);
+    ui_text_init(&txt_title_accent, get_font(TITLE_FONT_SIZE), TITLE_FONT_SIZE,
+                 COL_FG);
+    ui_text_init(&txt_title_dim, get_font(TITLE_FONT_SIZE), TITLE_FONT_SIZE,
+                 COL_FG_ALT);
     ui_text_update(&txt_title_accent, TITLE_ACCENTED, NULL, NULL);
     ui_text_update(&txt_title_dim, TITLE_DIM, NULL, NULL);
 
     // Sidebar labels
-    ui_text_init(&txt_lbl_score, get_font_from_sz(LABEL_FONT_SIZE),
-                 LABEL_FONT_SIZE, COL_FG_ALT);
-    ui_text_init(&txt_lbl_best, get_font_from_sz(LABEL_FONT_SIZE),
-                 LABEL_FONT_SIZE, COL_FG_ALT);
-    ui_text_init(&txt_lbl_level, get_font_from_sz(LABEL_FONT_SIZE),
-                 LABEL_FONT_SIZE, COL_FG_ALT);
-    ui_text_init(&txt_lbl_lines, get_font_from_sz(LABEL_FONT_SIZE),
-                 LABEL_FONT_SIZE, COL_FG_ALT);
-    ui_text_init(&txt_lbl_next, get_font_from_sz(LABEL_FONT_SIZE),
-                 LABEL_FONT_SIZE, COL_FG_ALT);
-    ui_text_init(&txt_lbl_controls, get_font_from_sz(LABEL_FONT_SIZE),
-                 LABEL_FONT_SIZE, COL_FG_ALT);
+    ui_text_init(&txt_lbl_score, get_font(LABEL_FONT_SIZE), LABEL_FONT_SIZE,
+                 COL_FG_ALT);
+    ui_text_init(&txt_lbl_best, get_font(LABEL_FONT_SIZE), LABEL_FONT_SIZE,
+                 COL_FG_ALT);
+    ui_text_init(&txt_lbl_level, get_font(LABEL_FONT_SIZE), LABEL_FONT_SIZE,
+                 COL_FG_ALT);
+    ui_text_init(&txt_lbl_lines, get_font(LABEL_FONT_SIZE), LABEL_FONT_SIZE,
+                 COL_FG_ALT);
+    ui_text_init(&txt_lbl_next, get_font(LABEL_FONT_SIZE), LABEL_FONT_SIZE,
+                 COL_FG_ALT);
+    ui_text_init(&txt_lbl_controls, get_font(LABEL_FONT_SIZE), LABEL_FONT_SIZE,
+                 COL_FG_ALT);
     ui_text_update(&txt_lbl_score, "SCORE", NULL, NULL);
     ui_text_update(&txt_lbl_best, "BEST", NULL, NULL);
     ui_text_update(&txt_lbl_level, "LEVEL", NULL, NULL);
@@ -1456,28 +1449,28 @@ static void ui_elements_init(void) {
     ui_text_update(&txt_lbl_controls, "CONTROLS", NULL, NULL);
 
     // Sidebar numerics
-    ui_text_init(&txt_score, get_font_from_sz(NUMERIC_FONT_SIZE),
-                 NUMERIC_FONT_SIZE, COL_FG);
-    ui_text_init(&txt_hs, get_font_from_sz(NUMERIC_FONT_SIZE),
-                 NUMERIC_FONT_SIZE, COL_FG_ALT);
-    ui_text_init(&txt_level, get_font_from_sz(NUMERIC_FONT_SIZE),
-                 NUMERIC_FONT_SIZE, COL_FG);
-    ui_text_init(&txt_lines, get_font_from_sz(NUMERIC_FONT_SIZE),
-                 NUMERIC_FONT_SIZE, COL_FG);
+    ui_text_init(&txt_score, get_font(NUMERIC_FONT_SIZE), NUMERIC_FONT_SIZE,
+                 COL_FG);
+    ui_text_init(&txt_hs, get_font(NUMERIC_FONT_SIZE), NUMERIC_FONT_SIZE,
+                 COL_FG_ALT);
+    ui_text_init(&txt_level, get_font(NUMERIC_FONT_SIZE), NUMERIC_FONT_SIZE,
+                 COL_FG);
+    ui_text_init(&txt_lines, get_font(NUMERIC_FONT_SIZE), NUMERIC_FONT_SIZE,
+                 COL_FG);
     ui_text_update(&txt_score, "0", NULL, NULL);
     ui_text_update(&txt_hs, "0", NULL, NULL);
     ui_text_update(&txt_level, "1", NULL, NULL);
     ui_text_update(&txt_lines, "0", NULL, NULL);
 
     // Credit
-    ui_text_init(&txt_credit, get_font_from_sz(CREDIT_FONT_SIZE),
-                 CREDIT_FONT_SIZE, COL_NEUTRAL);
+    ui_text_init(&txt_credit, get_font(CREDIT_FONT_SIZE), CREDIT_FONT_SIZE,
+                 COL_NEUTRAL);
     ui_text_update(&txt_credit, CREDIT_TEXT, NULL, NULL);
 
     // Popups
-    ui_popup_init(&pp_score, get_font_from_sz(POPUP_FONT_SIZE), POPUP_FONT_SIZE,
+    ui_popup_init(&pp_score, get_font(POPUP_FONT_SIZE), POPUP_FONT_SIZE,
                   COL_GREEN);
-    ui_popup_init(&pp_combo, get_font_from_sz(POPUP_FONT_SIZE), POPUP_FONT_SIZE,
+    ui_popup_init(&pp_combo, get_font(POPUP_FONT_SIZE), POPUP_FONT_SIZE,
                   COL_YELLOW);
 
     ui_popup_update(&pp_score, " ", NULL, NULL, NULL);
@@ -1485,17 +1478,17 @@ static void ui_elements_init(void) {
 
     // Key bindings
     for (uint8_t i = 0; i < KB_COUNT; i++) {
-        ui_keyinfo_init(&keybindings[i], get_font_from_sz(BADGE_FONT_SIZE),
+        ui_keyinfo_init(&ui_key_info_list[i], get_font(BADGE_FONT_SIZE),
                         BADGE_FONT_SIZE);
-        ui_keyinfo_update(&keybindings[i], keyboard_key_names[i], kb_desc[i],
-                          NULL, NULL);
+        ui_keyinfo_update(&ui_key_info_list[i], keyboard_key_names[i],
+                          kb_desc[i], NULL, NULL);
     }
 }
 
 // Initialize state variables, used on when a new game starts.
 static void state_init(void) {
     ctetris_init();
-    ui_grid_init();
+    ui_main_grid_init();
 
     score = 0;
     level = 1;
@@ -1504,16 +1497,19 @@ static void state_init(void) {
     ui_text_update(&txt_level, "1", NULL, NULL);
     ui_text_update(&txt_lines, "0", NULL, NULL);
 
-    ui_popup_update(&pp_score, NULL, NULL, NULL, &falsy);
-    ui_popup_update(&pp_combo, NULL, NULL, NULL, &falsy);
+    ui_popup_update(&pp_score, NULL, NULL, NULL, &(bool){false});
+    ui_popup_update(&pp_combo, NULL, NULL, NULL, &(bool){false});
 
     anim_set_none(&trail_anim);
 
+    player_active_shape.shape.type = N;
+    player_shadow_shape.shape.type = N;
+    player_next_shape.shape.type = N;
+
     paused = false;
-    write_to_grid = false;
-    shape_exists = false;
+    ui_main_grid_write_pending = false;
     block_engine = false;
-    move_lines = false;
+    line_move_pending = false;
     game_over = false;
     game_over_t = 0.0f;
 }
@@ -1525,32 +1521,31 @@ void renderer_init(void) {
     // Dummy window to figure out dpi scale factor manually.
     uint64_t dummy_size = 500;
     SetWindowSize(dummy_size, dummy_size);
-
     float dpi_scale_factor = (float)GetRenderWidth() / dummy_size;
 
     uint64_t mon = GetCurrentMonitor();
-    // Make the window size set to 80% of that of the monitor height.
+    // Make the window size set to a certain % of that of the monitor height.
     // Window is a rectangle.
     uint64_t window_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
 
     uint64_t logical_window_size = window_size / dpi_scale_factor;
 
+    // To get a window of `window_size` i need to ask raylib for a window of
+    // `logical_window_size`.
     SetWindowSize(logical_window_size, logical_window_size);
 
     // Center the window.
-    SetWindowPosition((GetMonitorWidth(mon) - logical_window_size) / 2,
-                      (GetMonitorHeight(mon) - logical_window_size) / 2);
+    SetWindowPosition((GetMonitorWidth(mon) - window_size) / 2,
+                      (GetMonitorHeight(mon) - window_size) / 2);
 
     InitAudioDevice();
 
     // Window decoration icon setup.
     Image icon = LoadImageFromMemory(".png", ICON_PNG, ICON_PNG_LEN);
-    if (icon.data != NULL) {
-        SetWindowIcon(icon);
-        UnloadImage(icon);
-    }
+    SetWindowIcon(icon);
+    UnloadImage(icon);
 
-    // Derive layout contraints from the now computed window dimensions.
+    // Derive layout constraints from the now computed window dimensions.
     ui_layout_compute(window_size, window_size);
 
     SetTargetFPS(FPS);
@@ -1575,8 +1570,7 @@ void renderer_high_score_set(uint32_t hs) {
     char buf[TEXT_BUFF_LEN];
     snprintf(buf, sizeof(buf), "%u", high_score);
     ui_text_update(&txt_hs, buf, NULL, NULL);
-    txt_hs.bounds.x =
-        SB_CON_X_S + SB_CON_W_S - SB_CON_PAD_S - txt_hs.bounds.width;
+    txt_hs.bounds.x = SB_CON_X + SB_CON_W - SB_CON_PAD - txt_hs.bounds.width;
 }
 
 uint32_t renderer_high_score_get(void) { return high_score; }
@@ -1588,37 +1582,37 @@ bool renderer_input(void) {
 
     if (IsKeyPressed(KEY_P)) {
         paused = !paused;
-        ui_badge_update(&keybindings[KB_PAUSE].ui_badge, NULL, NULL, NULL,
+        ui_badge_update(&ui_key_info_list[KB_PAUSE].ui_badge, NULL, NULL, NULL,
                         &paused);
     }
 
     if (IsKeyPressed(KEY_R)) {
-        ui_badge_update(&keybindings[KB_RESTART].ui_badge, NULL, NULL, NULL,
-                        &truthy);
+        ui_badge_update(&ui_key_info_list[KB_RESTART].ui_badge, NULL, NULL,
+                        NULL, &(bool){true});
         state_init();
 
-        ui_badge_update(&keybindings[KB_PAUSE].ui_badge, NULL, NULL, NULL,
+        ui_badge_update(&ui_key_info_list[KB_PAUSE].ui_badge, NULL, NULL, NULL,
                         &paused);
         return true;
     } else {
-        ui_badge_update(&keybindings[KB_RESTART].ui_badge, NULL, NULL, NULL,
-                        &falsy);
+        ui_badge_update(&ui_key_info_list[KB_RESTART].ui_badge, NULL, NULL,
+                        NULL, &(bool){false});
     }
 
     if (IsKeyPressed(KEY_T)) {
         prev_scheme = current_scheme;
         current_scheme = (current_scheme + 1) % SCHEME_COUNT;
         theme_switch_t = 0.0f;
-        ui_badge_update(&keybindings[KB_THEME].ui_badge, NULL, NULL, NULL,
-                        &truthy);
+        ui_badge_update(&ui_key_info_list[KB_THEME].ui_badge, NULL, NULL, NULL,
+                        &(bool){true});
     } else {
-        ui_badge_update(&keybindings[KB_THEME].ui_badge, NULL, NULL, NULL,
-                        &falsy);
+        ui_badge_update(&ui_key_info_list[KB_THEME].ui_badge, NULL, NULL, NULL,
+                        &(bool){false});
     }
 
     if (IsKeyPressed(KEY_M)) {
         audio_muted = !audio_muted;
-        ui_badge_update(&keybindings[KB_MUTE].ui_badge, NULL, NULL, NULL,
+        ui_badge_update(&ui_key_info_list[KB_MUTE].ui_badge, NULL, NULL, NULL,
                         &audio_muted);
     }
 
@@ -1638,36 +1632,38 @@ bool renderer_input(void) {
     };
     ctetris_input_push(input_state);
 
+    // Set key info badge state based on input.
     bool left = input_state.shift_left_pressed || input_state.shift_left_held;
     bool right =
         input_state.shift_right_pressed || input_state.shift_right_held;
 
-    if (keybindings[KB_HARD_DROP].ui_badge.active !=
+    if (ui_key_info_list[KB_HARD_DROP].ui_badge.active !=
         input_state.hard_drop_pressed)
-        ui_badge_update(&keybindings[KB_HARD_DROP].ui_badge, NULL, NULL, NULL,
-                        &input_state.hard_drop_pressed);
+        ui_badge_update(&ui_key_info_list[KB_HARD_DROP].ui_badge, NULL, NULL,
+                        NULL, &input_state.hard_drop_pressed);
 
-    if (keybindings[KB_MOVE_LEFT].ui_badge.active != left)
-        ui_badge_update(&keybindings[KB_MOVE_LEFT].ui_badge, NULL, NULL, NULL,
-                        &left);
+    if (ui_key_info_list[KB_MOVE_LEFT].ui_badge.active != left)
+        ui_badge_update(&ui_key_info_list[KB_MOVE_LEFT].ui_badge, NULL, NULL,
+                        NULL, &left);
 
-    if (keybindings[KB_MOVE_RIGHT].ui_badge.active != right)
-        ui_badge_update(&keybindings[KB_MOVE_RIGHT].ui_badge, NULL, NULL, NULL,
-                        &right);
+    if (ui_key_info_list[KB_MOVE_RIGHT].ui_badge.active != right)
+        ui_badge_update(&ui_key_info_list[KB_MOVE_RIGHT].ui_badge, NULL, NULL,
+                        NULL, &right);
 
-    if (keybindings[KB_SOFT_DROP].ui_badge.active != input_state.soft_drop_held)
-        ui_badge_update(&keybindings[KB_SOFT_DROP].ui_badge, NULL, NULL, NULL,
-                        &input_state.soft_drop_held);
+    if (ui_key_info_list[KB_SOFT_DROP].ui_badge.active !=
+        input_state.soft_drop_held)
+        ui_badge_update(&ui_key_info_list[KB_SOFT_DROP].ui_badge, NULL, NULL,
+                        NULL, &input_state.soft_drop_held);
 
-    if (keybindings[KB_ROTATE_RIGHT].ui_badge.active !=
+    if (ui_key_info_list[KB_ROTATE_RIGHT].ui_badge.active !=
         input_state.rotate_right_pressed)
-        ui_badge_update(&keybindings[KB_ROTATE_RIGHT].ui_badge, NULL, NULL,
+        ui_badge_update(&ui_key_info_list[KB_ROTATE_RIGHT].ui_badge, NULL, NULL,
                         NULL, &input_state.rotate_right_pressed);
 
-    if (keybindings[KB_ROTATE_LEFT].ui_badge.active !=
+    if (ui_key_info_list[KB_ROTATE_LEFT].ui_badge.active !=
         input_state.rotate_left_pressed)
-        ui_badge_update(&keybindings[KB_ROTATE_LEFT].ui_badge, NULL, NULL, NULL,
-                        &input_state.rotate_left_pressed);
+        ui_badge_update(&ui_key_info_list[KB_ROTATE_LEFT].ui_badge, NULL, NULL,
+                        NULL, &input_state.rotate_left_pressed);
 
     return true;
 }
@@ -1684,38 +1680,42 @@ void renderer_update(void) {
     if (paused || game_over)
         return;
 
-    // In case the engine is blocked for playing animations then block till
-    // all animations are finished.
+    // In case the engine is blocked for playing animations / mutating main ui
+    // grid then unblock once they are finished.
     if (block_engine) {
-        if (grid_anim || (player_active_shape.anim.type != ANIM_NONE) ||
+        if (ui_main_grid_animating ||
+            (player_active_shape.anim.type != ANIM_NONE) ||
             (trail_anim.type != ANIM_NONE))
             return;
 
-        if (move_lines) {
+        if (line_move_pending) {
             for (uint8_t i = 0; i < line_move_count; i++) {
-                uint8_t src = grid_line_moves[i].x;
-                uint8_t dst = grid_line_moves[i].y;
+                uint8_t src = line_moves[i].x;
+                uint8_t dst = line_moves[i].y;
                 for (uint8_t c = 0; c < COLS; c++) {
-                    if (ui_grid[src][c].type == N)
+                    if (ui_main_grid[src][c].type == N)
                         continue;
-                    ui_grid[dst][c] = ui_grid[src][c];
-                    uint64_t x = GRID_CX_S + CELL_S * c + CELL_PAD_S;
-                    uint64_t from_y = GRID_CY_S + src * CELL_S;
-                    uint64_t to_y = GRID_CY_S + dst * CELL_S;
-                    anim_set_translate(&ui_grid[dst][c].anim, LINE_MOVE_SPEED,
-                                       (Vector2){x, from_y},
+                    ui_main_grid[dst][c] = ui_main_grid[src][c];
+                    uint64_t x = MAIN_GRID_CX + MAIN_CELL * c + MAIN_CELL_PAD;
+                    uint64_t from_y = MAIN_GRID_CY + src * MAIN_CELL;
+                    uint64_t to_y = MAIN_GRID_CY + dst * MAIN_CELL;
+                    anim_set_translate(&ui_main_grid[dst][c].anim,
+                                       LINE_MOVE_SPEED, (Vector2){x, from_y},
                                        (Vector2){x, to_y});
-                    ui_grid[src][c].type = N;
+                    ui_main_grid[src][c].type = N;
                 }
             }
-            move_lines = false;
+            line_move_pending = false;
             return;
         }
 
-        if (write_to_grid) {
-            ui_grid_write_shape(player_active_shape.shape);
-            write_to_grid = false;
-            shape_exists = false;
+        if (ui_main_grid_write_pending) {
+            ui_main_grid_shape_write(player_active_shape.shape);
+            ui_main_grid_write_pending = false;
+            // Once the shape is locked then dont draw it and its shadow until a
+            // new shape is spawned.
+            player_active_shape.shape.type = N;
+            player_shadow_shape.shape.type = N;
         }
 
         block_engine = false;
@@ -1723,13 +1723,13 @@ void renderer_update(void) {
 
     struct CTetrisEvent ev;
     while ((ev = ctetris_event_pop()).type != CTETRIS_EVENT_NONE) {
-        if (!handle_event(ev)) {
+        if (!event_handle(ev)) {
             block_engine = true;
             return;
         }
     }
 
-    // The engine is only stepped forward when it isnt blocked and also when
+    // The engine is only stepped forward when it isnt blocked and
     // all buffered events are processed.
     ctetris_update(delta);
 }
@@ -1747,23 +1747,19 @@ void renderer_render(void) {
     ui_divider_draw(&div_hdr_bottom);
     ui_divider_draw(&div_sb_left);
 
-    ui_grid_draw(dt);
+    ui_main_grid_draw(dt);
 
-    // stop drawing the active shape and its shadow if the engine reports
-    // the shape has been locked.
-    if (shape_exists) {
-        ui_shape_draw(&player_shadow_shape, COL_NEUTRAL, GRID_CX_S, GRID_CY_S,
-                      CELL_S, CELL_PAD_S, dt);
-        ui_shape_draw(&player_active_shape,
-                      piece_color(player_active_shape.shape.type), GRID_CX_S,
-                      GRID_CY_S, CELL_S, CELL_PAD_S, dt);
-    }
+    ui_shape_draw(&player_shadow_shape, COL_NEUTRAL, MAIN_GRID_CX, MAIN_GRID_CY,
+                  MAIN_CELL, MAIN_CELL_PAD, dt);
+    ui_shape_draw(&player_active_shape,
+                  piece_color(player_active_shape.shape.type), MAIN_GRID_CX,
+                  MAIN_GRID_CY, MAIN_CELL, MAIN_CELL_PAD, dt);
 
     hard_drop_trail_draw(dt);
 
     sb_score_draw(dt);
     sb_level_lines_draw(dt);
-    sb_preview_draw(dt);
+    sb_next_draw(dt);
     sb_controls_draw(dt);
 
     ui_popup_draw(&pp_score, dt);

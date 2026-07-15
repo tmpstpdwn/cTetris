@@ -13,7 +13,7 @@
 /*
  * following 2 fns are used to save / load score on / from the disk.
  * it does so by abstracting away the underlying os.
- * so technically this should work on windows and unix-like operating systems.
+ * so technically this should work on windows and linux.
  */
 
 // load saved score from the disk. if not previously saved, return 0.
