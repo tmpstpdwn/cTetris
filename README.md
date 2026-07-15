@@ -2,14 +2,14 @@
 
 # cTetris
 
-<img src="./cTetris_512x512.png" alt="cTetris Icon" width="512" height="512">
+<img src="./cTetris_512x512.png" alt="cTetris Icon" width="256" height="256">
 
 A minimal, simple tetris implementation written in C using raylib.
 
 <table align="center">
   <tr>
-    <td><img src="cTetris_dark.png" alt="Dark Theme" width="450"></td>
-    <td><img src="cTetris_light.png" alt="Light Theme" width="450"></td>
+    <td><img src="cTetris_dark.png" alt="Dark Theme" width="500"></td>
+    <td><img src="cTetris_light.png" alt="Light Theme" width="500"></td>
   </tr>
 </table>
 </div>
@@ -71,11 +71,42 @@ cTetris has been tested and verified to work on:
 - **Linux** (X11 and Wayland).
 - **Windows**: 10 and later.
 
+### Known issues
+
+- **Wayland (DPI scaling)**: On Wayland compositors that don't report DPI scale information to raylib, the window may not scale properly.
+
 ---
 
 ## Releases
 
-Precompiled binaries for Linux and Windows are available on the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page.
+### Linux
+
+**Install**
+
+Download `cTetris-linux-x86_64.tar.gz` from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page and do:
+
+```bash
+tar -xzf cTetris-linux-x86_64.tar.gz
+cd cTetris-linux-x86_64
+mkdir -p ~/.local/bin ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/applications
+cp cTetris ~/.local/bin/
+cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
+cp cTetris.desktop ~/.local/share/applications/
+```
+
+**Uninstall**
+
+```bash
+rm -f ~/.local/bin/cTetris
+rm -f ~/.local/share/icons/hicolor/scalable/apps/cTetris.svg
+rm -f ~/.local/share/applications/cTetris.desktop
+```
+
+**Note:** Ensure `~/.local/bin` is in your `PATH`.
+
+### Windows
+
+Download the precompiled binary `cTetris.exe` from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page; No installation required.
 
 ---
 
@@ -83,19 +114,29 @@ Precompiled binaries for Linux and Windows are available on the [Releases](https
 
 ### Prerequisites
 
-- **GCC**
-- **Make**
+- **GCC**, **Make**: Native linux compilation.
+- **mingw-w64** toolchain: Cross-compile for windows.
 
-### Install (Linux only)
+### Linux
+
+**Install**
 
 ```bash
 make install
 ```
 
-### Uninstall
+**Uninstall**
 
 ```bash
 make uninstall
+```
+
+**Note:** Ensure `~/.local/bin` is in your `PATH`.
+
+### Windows (cross-compile from Linux)
+
+```bash
+make windows
 ```
 
 ---
