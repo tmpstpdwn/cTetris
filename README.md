@@ -2,7 +2,7 @@
 
 # cTetris
 
-<img src="./cTetris_512x512.png" alt="cTetris Icon" width="256" height="256">
+<img src="./cTetris_512x512.png" alt="cTetris Icon" width="512" height="512">
 
 A minimal, simple tetris implementation written in C using raylib.
 
@@ -64,6 +64,21 @@ A minimal, simple tetris implementation written in C using raylib.
 
 ---
 
+## Platform Support
+
+cTetris has been tested and verified to work on:
+
+- **Linux** (X11 and Wayland).
+- **Windows**: 10 and later.
+
+---
+
+## Releases
+
+Precompiled binaries for Linux and Windows are available on the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page.
+
+---
+
 ## Building from Source
 
 ### Prerequisites
@@ -85,24 +100,9 @@ make uninstall
 
 ---
 
-## Releases
-
-Precompiled binaries for Linux and Windows are available on the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page.
-
----
-
-## Platform Support
-
-cTetris has been tested and verified to work on:
-
-- **Linux**
-- **Windows**: 10 and later
-
----
-
 ## Code Documentation
 
-The codebase is extensively documented with comments across all source files. Refer to the source files for detailed technical information.
+The codebase is documented with comments across all source files. Refer to the source files for detailed technical information.
 
 ---
 
