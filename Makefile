@@ -39,7 +39,7 @@ package: linux
 
 	cp cTetris cTetris-linux-x86_64/
 	cp cTetris.desktop cTetris-linux-x86_64/
-	cp cTetris_256.png cTetris-linux-x86_64/cTetris.png
+	cp cTetris.svg cTetris-linux-x86_64/
 
 	tar -czf cTetris-linux-x86_64.tar.gz cTetris-linux-x86_64
 	rm -rf cTetris-linux-x86_64
@@ -50,7 +50,7 @@ windows: CC = x86_64-w64-mingw32-gcc
 windows: OUT = cTetris.exe
 windows: CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99 -flto
 windows: LDFLAGS = -Llib_win -flto -s
-windows: LDLIBS = -lraylib -lwinmm -Wl,--defsym=stat64i32=_stat64i32 -mwindows
+windows: LDLIBS = -lraylib -lwinmm -Wl,--defsym=stat64i32=_stat64i32 -lgdi32 -lopengl32 -mwindows
 windows: $(OBJ) resource.o
 	$(CC) $(OBJ) resource.o -o $(OUT) $(LDFLAGS) $(LDLIBS)
 
@@ -63,9 +63,9 @@ install: linux
 	@cp cTetris ~/.local/bin/
 	@echo "Installed binary at ~/.local/bin"
 
-	@mkdir -p ~/.local/share/icons/hicolor/256x256/apps
-	@cp cTetris_256.png ~/.local/share/icons/hicolor/256x256/apps/cTetris.png
-	@echo "Installed icon at ~/.local/share/icons/hicolor/256x256/apps"
+	@mkdir -p ~/.local/share/icons/hicolor/scalable/apps
+	@cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
+	@echo "Installed icon at ~/.local/share/icons/hicolor/scalable/apps"
 
 	@mkdir -p ~/.local/share/applications
 	@cp cTetris.desktop ~/.local/share/applications/
@@ -79,8 +79,8 @@ uninstall:
 	rm -f ~/.local/bin/cTetris
 	@echo "Uninstalled binary from ~/.local/bin"
 
-	rm -f ~/.local/share/icons/hicolor/256x256/apps/cTetris.png
-	@echo "Uninstalled icon from ~/.local/share/icons/hicolor/256x256/apps"
+	rm -f ~/.local/share/icons/hicolor/scalable/apps/cTetris.svg
+	@echo "Uninstalled icon from ~/.local/share/icons/hicolor/scalable/apps"
 
 	rm -f ~/.local/share/applications/cTetris.desktop
 	@echo "Uninstalled desktop entry from ~/.local/share/applications"

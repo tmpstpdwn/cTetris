@@ -19,10 +19,6 @@
 
 /* [ DEFINES ] */
 
-// Macro to properly scale `val` by `scale` factor by rounding it to the closest
-// integer.
-#define SCALE_INT(val, scale) ((uint64_t)roundf((val) * (scale)))
-
 #define FPS 60
 
 // Text literals.
@@ -30,6 +26,8 @@
 #define TITLE_DIM "Tetris"
 #define CREDIT_TEXT "cTetris | Tmpstpdwn"
 
+// Window height % wrt monitor height.
+#define WH_TO_MH_PCT 0.8f
 #define SPLIT_AT_PCT 0.5f // Where the sidebar should start %.
 
 #define TEXT_BUFF_LEN 20
@@ -220,14 +218,10 @@ static uint64_t SB_CON_PAD_S;
 static uint64_t SB_SEC_PAD_S, SB_LABEL_MG_S, SB_KEYINFO_MG_S;
 
 // Logical width and height of the window.
-static uint64_t LW_S, LH_S;
+static uint64_t W_S, H_S;
 
 // Font sizes for small, medium and large fonts.
 static uint64_t FONT_SM_S, FONT_MD_S, FONT_LG_S;
-
-// The size to load small, medium and large fonts adjusting for high dpi
-// scaling.
-static uint64_t FONT_SM_LOAD_SZ, FONT_MD_LOAD_SZ, FONT_LG_LOAD_SZ;
 
 // Assets.
 static Font font_sm, font_md, font_lg;
@@ -308,7 +302,7 @@ static struct UIDivider div_sb_left;
 static struct UIDivider div_sb_1;
 static struct UIDivider div_sb_2;
 static struct UIDivider div_sb_3;
-static struct UIDivider div_sb_stats;
+static struct UIDivider div_sb_level_lines;
 
 // All text elements on the UI.
 static struct UIText txt_title_accent, txt_title_dim;
@@ -820,7 +814,7 @@ static uint64_t sb_score_cache(uint64_t x, uint64_t y) {
 
     y += txt_hs.bounds.height + SB_SEC_PAD_S;
 
-    ui_divider_update(&div_sb_1, x, y, LW_S - SB_CON_PAD_S, y);
+    ui_divider_update(&div_sb_1, x, y, W_S - SB_CON_PAD_S, y);
 
     return y + 1;
 }
@@ -828,23 +822,24 @@ static uint64_t sb_score_cache(uint64_t x, uint64_t y) {
 static uint64_t sb_level_lines_cache(uint64_t x, uint64_t y) {
     y += SB_SEC_PAD_S;
 
-    uint64_t sb_w = SB_CON_W_S - SB_CON_PAD_S * 2;
-    uint64_t split = x + sb_w / 2;
+    uint64_t sb_cw = SB_CON_W_S - SB_CON_PAD_S * 2;
+    uint64_t split = x + sb_cw / 2;
+    uint64_t lines_x = split + SB_CON_PAD_S;
 
     ui_text_update(&txt_lbl_level, NULL, &x, &y);
-    ui_text_update(&txt_lbl_lines, NULL, &split, &y);
+    ui_text_update(&txt_lbl_lines, NULL, &lines_x, &y);
 
     y += txt_lbl_level.bounds.height + SB_LABEL_MG_S;
     ui_text_update(&txt_level, NULL, &x, &y);
-    ui_text_update(&txt_lines, NULL, &split, &y);
+    ui_text_update(&txt_lines, NULL, &lines_x, &y);
 
-    ui_divider_update(&div_sb_stats, split - SB_CON_PAD_S,
-                      y - txt_level.bounds.height - SB_LABEL_MG_S,
-                      split - SB_CON_PAD_S, y + SB_LABEL_MG_S);
+    ui_divider_update(&div_sb_level_lines, split,
+                      y - txt_lbl_level.bounds.height - SB_LABEL_MG_S, split,
+                      y + txt_level.bounds.height);
 
     y += txt_level.bounds.height + SB_SEC_PAD_S;
 
-    ui_divider_update(&div_sb_2, x, y, LW_S - SB_CON_PAD_S, y);
+    ui_divider_update(&div_sb_2, x, y, W_S - SB_CON_PAD_S, y);
 
     return y + 1;
 }
@@ -860,7 +855,7 @@ static uint64_t sb_preview_cache(uint64_t x, uint64_t y) {
     PREV_GRID_CY_S = y;
 
     y += PREVIEW_GRID_SIZE * PREV_CELL_S + SB_SEC_PAD_S;
-    ui_divider_update(&div_sb_3, x, y, LW_S - SB_CON_PAD_S, y);
+    ui_divider_update(&div_sb_3, x, y, W_S - SB_CON_PAD_S, y);
 
     return y + 1;
 }
@@ -981,7 +976,7 @@ static void sb_level_lines_draw(float dt) {
     ui_text_draw(&txt_level, dt);
     ui_text_draw(&txt_lines, dt);
 
-    ui_divider_draw(&div_sb_stats);
+    ui_divider_draw(&div_sb_level_lines);
     ui_divider_draw(&div_sb_2);
 }
 
@@ -1336,13 +1331,13 @@ static bool handle_event(struct CTetrisEvent ev) {
 
 /* Asset management */
 
-static void load_assets(void) {
-    font_sm = LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN,
-                                 FONT_SM_LOAD_SZ, NULL, 0);
-    font_md = LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN,
-                                 FONT_MD_LOAD_SZ, NULL, 0);
-    font_lg = LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN,
-                                 FONT_LG_LOAD_SZ, NULL, 0);
+static void assets_load(void) {
+    font_sm =
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_SM_S, NULL, 0);
+    font_md =
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_MD_S, NULL, 0);
+    font_lg =
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_LG_S, NULL, 0);
 
     SetTextureFilter(font_sm.texture, TEXTURE_FILTER_POINT);
     SetTextureFilter(font_md.texture, TEXTURE_FILTER_POINT);
@@ -1364,7 +1359,7 @@ static void load_assets(void) {
     UnloadWave(sfx_clack_wave);
 }
 
-static void unload_assets(void) {
+static void assets_unload(void) {
     UnloadFont(font_sm);
     UnloadFont(font_md);
     UnloadFont(font_lg);
@@ -1375,20 +1370,15 @@ static void unload_assets(void) {
 
 /* UI Core */
 
-static void ui_layout_compute(uint64_t logical_w, uint64_t logical_h,
-                              double dpi_scale) {
-    LW_S = logical_w;
-    LH_S = logical_h;
+static void ui_layout_compute(uint64_t window_w, uint64_t window_h) {
+    W_S = window_w;
+    H_S = window_h;
 
-    FONT_LG_S = 0.04f * LH_S;
+    FONT_LG_S = 0.04f * H_S;
     FONT_MD_S = 0.7f * FONT_LG_S;
     FONT_SM_S = 0.5f * FONT_LG_S;
 
-    FONT_SM_LOAD_SZ = SCALE_INT((float)FONT_SM_S, (float)dpi_scale);
-    FONT_MD_LOAD_SZ = SCALE_INT((float)FONT_MD_S, (float)dpi_scale);
-    FONT_LG_LOAD_SZ = SCALE_INT((float)FONT_LG_S, (float)dpi_scale);
-
-    uint64_t split_x = logical_w * SPLIT_AT_PCT;
+    uint64_t split_x = window_w * SPLIT_AT_PCT;
 
     HDR_CON_X_S = 0;
     HDR_CON_Y_S = 0;
@@ -1398,7 +1388,7 @@ static void ui_layout_compute(uint64_t logical_w, uint64_t logical_h,
     GRID_CON_X_S = 0;
     GRID_CON_Y_S = HDR_CON_H_S;
     GRID_CON_W_S = split_x;
-    GRID_CON_H_S = logical_h - HDR_CON_H_S;
+    GRID_CON_H_S = window_h - HDR_CON_H_S;
 
     uint64_t cell_h = GRID_CON_H_S / (ROWS + 2);
     uint64_t cell_w = GRID_CON_W_S / COLS;
@@ -1417,8 +1407,8 @@ static void ui_layout_compute(uint64_t logical_w, uint64_t logical_h,
 
     SB_CON_X_S = split_x;
     SB_CON_Y_S = 0;
-    SB_CON_W_S = logical_w - split_x;
-    SB_CON_H_S = logical_h;
+    SB_CON_W_S = window_w - split_x;
+    SB_CON_H_S = window_h;
 
     SB_CON_PAD_S = 0.04f * SB_CON_W_S;
 
@@ -1435,7 +1425,7 @@ static void ui_elements_init(void) {
     ui_divider_init(&div_sb_1, COL_SUBTLE, 1);
     ui_divider_init(&div_sb_2, COL_SUBTLE, 1);
     ui_divider_init(&div_sb_3, COL_SUBTLE, 1);
-    ui_divider_init(&div_sb_stats, COL_SUBTLE, 1);
+    ui_divider_init(&div_sb_level_lines, COL_SUBTLE, 1);
 
     // Header text
     ui_text_init(&txt_title_accent, get_font_from_sz(TITLE_FONT_SIZE),
@@ -1503,7 +1493,7 @@ static void ui_elements_init(void) {
 }
 
 // Initialize state variables, used on when a new game starts.
-static void init_state(void) {
+static void state_init(void) {
     ctetris_init();
     ui_grid_init();
 
@@ -1530,11 +1520,28 @@ static void init_state(void) {
 
 // Initialize the renderer.
 void renderer_init(void) {
-    SetConfigFlags(FLAG_WINDOW_HIGHDPI);
+    InitWindow(10, 10, "cTetris");
 
-    // Init dummy window to get monitor dimensions and figure out the
-    // window's logical width and height.
-    InitWindow(100, 100, "cTetris");
+    // Dummy window to figure out dpi scale factor manually.
+    uint64_t dummy_size = 500;
+    SetWindowSize(dummy_size, dummy_size);
+
+    float dpi_scale_factor = (float)GetRenderWidth() / dummy_size;
+
+    uint64_t mon = GetCurrentMonitor();
+    // Make the window size set to 80% of that of the monitor height.
+    // Window is a rectangle.
+    uint64_t window_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
+
+    uint64_t logical_window_size = window_size / dpi_scale_factor;
+
+    SetWindowSize(logical_window_size, logical_window_size);
+
+    // Center the window.
+    SetWindowPosition((GetMonitorWidth(mon) - logical_window_size) / 2,
+                      (GetMonitorHeight(mon) - logical_window_size) / 2);
+
+    InitAudioDevice();
 
     // Window decoration icon setup.
     Image icon = LoadImageFromMemory(".png", ICON_PNG, ICON_PNG_LEN);
@@ -1543,49 +1550,27 @@ void renderer_init(void) {
         UnloadImage(icon);
     }
 
-    uint64_t mon = GetCurrentMonitor();
-    InitAudioDevice();
-
-    double dpi_scale = GetWindowScaleDPI().x;
-
-    // Window height and width is set to be 80% of monitor height.
-    uint64_t window_size = GetMonitorHeight(mon) * 0.8f;
-    // Compute logical dimensions.
-    uint64_t window_size_logical = (double)window_size / dpi_scale;
-
-    // derive layout variables from the now computed window dimensions.
-    ui_layout_compute(window_size_logical, window_size_logical, dpi_scale);
-
-    SetWindowSize(window_size_logical, window_size_logical); // Resize.
-    // Center the window on the monitor.
-    SetWindowPosition((GetMonitorWidth(mon) - window_size) / 2,
-                      (GetMonitorHeight(mon) - window_size) / 2);
-
-    printf("Monitor Height: %d\n", GetMonitorHeight(mon));
-    printf("Screen Height: %d\n", GetScreenHeight());
-    printf("Render Height: %d\n", GetRenderHeight());
-
-    Vector2 dpi = GetWindowScaleDPI();
-    printf("DPI Scale: %.2f\n", dpi.y);
+    // Derive layout contraints from the now computed window dimensions.
+    ui_layout_compute(window_size, window_size);
 
     SetTargetFPS(FPS);
     SetExitKey(KEY_NULL);
 
     // Load Font, Sound assets.
-    load_assets();
+    assets_load();
 
-    ui_elements_init();  // Setup ui elements.
+    ui_elements_init();  // Initialize ui elements.
     ui_elements_cache(); // Compute where ui elements should go (position).
 
-    init_state(); // Initialize the engine and game state variables.
+    state_init(); // Initialize the engine and game state variables.
 }
 
 void renderer_shutdown(void) {
-    unload_assets();
+    assets_unload();
     CloseWindow();
 }
 
-void renderer_set_high_score(uint32_t hs) {
+void renderer_high_score_set(uint32_t hs) {
     high_score = hs;
     char buf[TEXT_BUFF_LEN];
     snprintf(buf, sizeof(buf), "%u", high_score);
@@ -1594,7 +1579,7 @@ void renderer_set_high_score(uint32_t hs) {
         SB_CON_X_S + SB_CON_W_S - SB_CON_PAD_S - txt_hs.bounds.width;
 }
 
-uint32_t renderer_get_high_score(void) { return high_score; }
+uint32_t renderer_high_score_get(void) { return high_score; }
 
 // Renderer's input handler.
 bool renderer_input(void) {
@@ -1610,7 +1595,7 @@ bool renderer_input(void) {
     if (IsKeyPressed(KEY_R)) {
         ui_badge_update(&keybindings[KB_RESTART].ui_badge, NULL, NULL, NULL,
                         &truthy);
-        init_state();
+        state_init();
 
         ui_badge_update(&keybindings[KB_PAUSE].ui_badge, NULL, NULL, NULL,
                         &paused);

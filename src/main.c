@@ -18,7 +18,7 @@ int main(void) {
 
     // Load high score and give it to the renderer.
     uint32_t high_score = score_load();
-    renderer_set_high_score(high_score);
+    renderer_high_score_set(high_score);
 
     while (renderer_input()) {
         renderer_update();
@@ -26,7 +26,7 @@ int main(void) {
     }
 
     // If the high score has changed, save it.
-    uint32_t final_score = renderer_get_high_score();
+    uint32_t final_score = renderer_high_score_get();
     if (final_score > high_score)
         score_save(final_score);
 

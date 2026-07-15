@@ -20,11 +20,11 @@ void renderer_update(void);
 void renderer_render(void);
 
 // Pass high score value on to the renderer.
-void renderer_set_high_score(uint32_t hs);
+void renderer_high_score_set(uint32_t hs);
 // Retrieve high score value from the renderer.
 // Returned value will be greater than or equal to the value passed on to the
 // renderer.
-uint32_t renderer_get_high_score(void);
+uint32_t renderer_high_score_get(void);
 
 #endif
 
