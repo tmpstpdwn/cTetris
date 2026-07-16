@@ -100,7 +100,7 @@ else ifeq ($(PACKAGE),windows)
 	mkdir -p cTetris-$(VERSION)-windows-x86_64
 	cp cTetris.exe cTetris-$(VERSION)-windows-x86_64/
 	cp LICENSE cTetris-$(VERSION)-windows-x86_64/
-	cp README.md cTetris-$(VERSION)-linux-x86_64/
+	cp README.md cTetris-$(VERSION)-windows-x86_64/
 	cd cTetris-$(VERSION)-windows-x86_64 && zip -r ../cTetris-$(VERSION)-windows-x86_64.zip . && cd ..
 	rm -rf cTetris-$(VERSION)-windows-x86_64
 	@echo "Created cTetris-$(VERSION)-windows-x86_64.zip"
