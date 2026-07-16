@@ -6,6 +6,8 @@
  * - running the renderer.
  */
 
+// Version: 1.0.0
+
 /* [ INCLUDES ] */
 
 #include "renderer.h"

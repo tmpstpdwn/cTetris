@@ -20,7 +20,7 @@
 // Text literals.
 #define TITLE_ACCENTED "c"
 #define TITLE_DIM "Tetris"
-#define CREDIT_TEXT "cTetris | Tmpstpdwn"
+#define CREDIT_TEXT "cTetris v1.0.0 | Tmpstpdwn"
 
 // Window height % wrt monitor height.
 #define WH_TO_MH_PCT 0.8f

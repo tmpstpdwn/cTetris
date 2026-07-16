@@ -1,3 +1,4 @@
+VERSION := 1.0.0
 CC = gcc
 SRC := $(wildcard src/*.c)
 COMMON_CFLAGS := -Iinclude -Wall -Wextra -pedantic -std=c99
@@ -12,14 +13,15 @@ endif
 
 .DEFAULT_GOAL := help
 help:
-	@echo "make what???"
+	@echo "Make what???"
 	@echo ""
-	@echo "make linux              - Linux release build"
-	@echo "make linux DEBUG=1      - Linux debug build"
-	@echo "make windows            - Windows release build"
-	@echo "make windows DEBUG=1    - Windows debug build"
-	@echo "make package            - Package Linux release build"
-	@echo "make clean              - Remove build artifacts"
+	@echo "make linux                   - Linux release build"
+	@echo "make windows                 - Windows release build"
+	@echo "make linux DEBUG=1           - Linux debug build"
+	@echo "make windows DEBUG=1         - Windows debug build"
+	@echo "make package PACKAGE=linux   - Package Linux release build (.tar.gz)"
+	@echo "make package PACKAGE=windows - Package Windows release build (.zip)"
+	@echo "make clean                   - Remove build artifacts"
 
 # Linux
 
@@ -42,18 +44,6 @@ $(LINUX_BUILD_DIR)/%.o: src/%.c | $(LINUX_BUILD_DIR)
 
 linux: $(LINUX_OBJ)
 	$(CC) $(LINUX_OBJ) -o $(LINUX_OUT) $(LINUX_LDFLAGS) -Llib -lX11 -lm -lraylib
-
-package:
-	$(MAKE) clean
-	$(MAKE) linux DEBUG=
-	rm -rf cTetris-linux-x86_64
-	mkdir -p cTetris-linux-x86_64
-	cp cTetris cTetris-linux-x86_64/
-	cp cTetris.desktop cTetris-linux-x86_64/
-	cp cTetris.svg cTetris-linux-x86_64/
-	tar -czf cTetris-linux-x86_64.tar.gz cTetris-linux-x86_64
-	rm -rf cTetris-linux-x86_64
-	@echo "Created cTetris-linux-x86_64.tar.gz"
 
 # Windows
 
@@ -81,9 +71,48 @@ windows: $(WINDOWS_OBJ) $(WINDOWS_RES)
 	-Wl,--defsym=stat64i32=_stat64i32 -lgdi32 -lopengl32 \
 	$(if $(DEBUG),,-mwindows)
 
+# Package
+
+package:
+ifndef PACKAGE
+	@echo "Error: PACKAGE not specified"
+	@echo "Usage: make package PACKAGE=linux   (for .tar.gz)"
+	@echo "   or: make package PACKAGE=windows (for .zip)"
+	@exit 1
+endif
+ifeq ($(PACKAGE),linux)
+	$(MAKE) clean
+	$(MAKE) linux DEBUG=
+	rm -rf cTetris-$(VERSION)-linux-x86_64
+	mkdir -p cTetris-$(VERSION)-linux-x86_64
+	cp cTetris cTetris-$(VERSION)-linux-x86_64/
+	cp cTetris.desktop cTetris-$(VERSION)-linux-x86_64/
+	cp cTetris.svg cTetris-$(VERSION)-linux-x86_64/
+	cp LICENSE cTetris-$(VERSION)-linux-x86_64/
+	cp README.md cTetris-$(VERSION)-linux-x86_64/
+	tar -czf cTetris-$(VERSION)-linux-x86_64.tar.gz cTetris-$(VERSION)-linux-x86_64
+	rm -rf cTetris-$(VERSION)-linux-x86_64
+	@echo "Created cTetris-$(VERSION)-linux-x86_64.tar.gz"
+else ifeq ($(PACKAGE),windows)
+	$(MAKE) clean
+	$(MAKE) windows DEBUG=
+	rm -rf cTetris-$(VERSION)-windows-x86_64
+	mkdir -p cTetris-$(VERSION)-windows-x86_64
+	cp cTetris.exe cTetris-$(VERSION)-windows-x86_64/
+	cp LICENSE cTetris-$(VERSION)-windows-x86_64/
+	cp README.md cTetris-$(VERSION)-linux-x86_64/
+	cd cTetris-$(VERSION)-windows-x86_64 && zip -r ../cTetris-$(VERSION)-windows-x86_64.zip . && cd ..
+	rm -rf cTetris-$(VERSION)-windows-x86_64
+	@echo "Created cTetris-$(VERSION)-windows-x86_64.zip"
+else
+	@echo "Error: PACKAGE must be 'linux' or 'windows'"
+	@exit 1
+endif
+
 clean:
 	rm -rf build
 	rm -f cTetris cTetris_debug cTetris.exe cTetris_debug.exe
-	rm -f cTetris-linux-x86_64.tar.gz
+	rm -f cTetris-$(VERSION)-linux-x86_64.tar.gz
+	rm -f cTetris-$(VERSION)-windows-x86_64.zip
 
-.PHONY: help linux windows package clean
+.PHONY: help linux windows package clean package

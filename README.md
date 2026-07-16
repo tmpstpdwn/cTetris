@@ -83,11 +83,10 @@ cTetris has been tested and verified to work on:
 
 **Install**
 
-Download `cTetris-linux-x86_64.tar.gz` from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page and do:
+Download the archive for linux from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page, extract it,
+enter the directory and do:
 
 ```bash
-tar -xzf cTetris-linux-x86_64.tar.gz
-cd cTetris-linux-x86_64
 mkdir -p ~/.local/bin ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/applications
 cp cTetris ~/.local/bin/
 cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
@@ -106,7 +105,7 @@ rm -f ~/.local/share/applications/cTetris.desktop
 
 ### Windows
 
-Download the precompiled binary `cTetris.exe` from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page; No installation required.
+Download the zip for windows from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page, extract it, and run `cTetris.exe`. No installation required.
 
 ---
 
