@@ -1,6 +1,6 @@
 <div align="center">
 
-# cTetris
+# cTetris (v1.0.0)
 
 <img src="./cTetris_512x512.png" alt="cTetris Icon" width="256" height="256">
 
