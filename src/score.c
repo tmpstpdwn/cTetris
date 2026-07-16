@@ -24,7 +24,7 @@
 
 // Get path to the score file based on the os.
 static void get_score_path(char *buf, size_t len) {
-    char dir[PATH_BUF_SIZE - 20];
+    char dir[PATH_BUF_SIZE];
 #if defined(_WIN32)
     const char *base = getenv("LOCALAPPDATA");
     if (!base)

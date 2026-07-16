@@ -1,93 +1,89 @@
 CC = gcc
-CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99 -flto
-LDFLAGS = -Llib -flto -s
-LDLIBS = -lX11 -lm -lraylib
+SRC := $(wildcard src/*.c)
+COMMON_CFLAGS := -Iinclude -Wall -Wextra -pedantic -std=c99
 
 ifdef DEBUG
-    CFLAGS := -Iinclude -Wall -pedantic -Wextra -g -O0 -DDEBUG \
-              -fsanitize=address -fno-omit-frame-pointer -std=c99
-    LDFLAGS += -fsanitize=address
-    OUT = cTetris_debug
+    BUILD_CFLAGS := -g -O0 -DDEBUG
+    BUILD_LDFLAGS :=
 else
-    OUT = cTetris
+    BUILD_CFLAGS := -O3 -flto
+    BUILD_LDFLAGS := -flto -s
 endif
 
-SRC = $(wildcard src/*.c)
-OBJ = $(SRC:.c=.o)
-
 .DEFAULT_GOAL := help
-
 help:
 	@echo "make what???"
 	@echo ""
-	@echo "make linux      - Compile native Linux binary"
-	@echo "make package    - Package for linux"
-	@echo "make install    - Install cTetris to local paths (linux)"
-	@echo "make uninstall  - Uninstall cTetris from local paths (linux)"
-	@echo "make windows    - Cross-compile Windows executable (.exe)"
-	@echo "make clean      - Remove build artifacts"
+	@echo "make linux              - Linux release build"
+	@echo "make linux DEBUG=1      - Linux debug build"
+	@echo "make windows            - Windows release build"
+	@echo "make windows DEBUG=1    - Windows debug build"
+	@echo "make package            - Package Linux release build"
+	@echo "make clean              - Remove build artifacts"
 
-%.o: %.c
-	$(CC) -c $< -o $@ $(CFLAGS)
+# Linux
 
-linux: $(OBJ)
-	$(CC) $(OBJ) -o $(OUT) $(LDFLAGS) $(LDLIBS)
+LINUX_BUILD_DIR := build/linux
+LINUX_OBJ := $(patsubst src/%.c,$(LINUX_BUILD_DIR)/%.o,$(SRC))
+LINUX_OUT := cTetris$(if $(DEBUG),_debug)
+LINUX_CFLAGS := $(BUILD_CFLAGS)
+LINUX_LDFLAGS := $(BUILD_LDFLAGS)
 
-package: linux
+ifdef DEBUG
+    LINUX_CFLAGS += -fno-omit-frame-pointer -fsanitize=address
+    LINUX_LDFLAGS += -fsanitize=address
+endif
+
+$(LINUX_BUILD_DIR):
+	mkdir -p $@
+
+$(LINUX_BUILD_DIR)/%.o: src/%.c | $(LINUX_BUILD_DIR)
+	$(CC) -c $< -o $@ $(COMMON_CFLAGS) $(LINUX_CFLAGS)
+
+linux: $(LINUX_OBJ)
+	$(CC) $(LINUX_OBJ) -o $(LINUX_OUT) $(LINUX_LDFLAGS) -Llib -lX11 -lm -lraylib
+
+package:
+	$(MAKE) clean
+	$(MAKE) linux DEBUG=
 	rm -rf cTetris-linux-x86_64
 	mkdir -p cTetris-linux-x86_64
-
 	cp cTetris cTetris-linux-x86_64/
 	cp cTetris.desktop cTetris-linux-x86_64/
 	cp cTetris.svg cTetris-linux-x86_64/
-
 	tar -czf cTetris-linux-x86_64.tar.gz cTetris-linux-x86_64
 	rm -rf cTetris-linux-x86_64
-
 	@echo "Created cTetris-linux-x86_64.tar.gz"
 
-windows: CC = x86_64-w64-mingw32-gcc
-windows: OUT = cTetris.exe
-windows: CFLAGS = -Iinclude -Wall -O3 -Wextra -pedantic -std=c99 -flto
-windows: LDFLAGS = -Llib_win -flto -s
-windows: LDLIBS = -lraylib -lwinmm -Wl,--defsym=stat64i32=_stat64i32 -lgdi32 -lopengl32 -mwindows
-windows: $(OBJ) resource.o
-	$(CC) $(OBJ) resource.o -o $(OUT) $(LDFLAGS) $(LDLIBS)
+# Windows
 
-resource.o: resource.rc
-	x86_64-w64-mingw32-windres resource.rc -O coff -o resource.o
+WINDOWS_CC := x86_64-w64-mingw32-gcc
+WINDOWS_RC := x86_64-w64-mingw32-windres
+WINDOWS_BUILD_DIR := build/windows
+WINDOWS_OBJ := $(patsubst src/%.c,$(WINDOWS_BUILD_DIR)/%.o,$(SRC))
+WINDOWS_RES := $(WINDOWS_BUILD_DIR)/resource.o
+WINDOWS_OUT := cTetris$(if $(DEBUG),_debug).exe
+WINDOWS_CFLAGS := $(BUILD_CFLAGS)
+WINDOWS_LDFLAGS := $(BUILD_LDFLAGS)
 
-install: linux
-	@echo "Installing cTetris..."
-	@mkdir -p ~/.local/bin
-	@cp cTetris ~/.local/bin/
-	@echo "Installed binary at ~/.local/bin"
+$(WINDOWS_BUILD_DIR):
+	mkdir -p $@
 
-	@mkdir -p ~/.local/share/icons/hicolor/scalable/apps
-	@cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
-	@echo "Installed icon at ~/.local/share/icons/hicolor/scalable/apps"
+$(WINDOWS_BUILD_DIR)/%.o: src/%.c | $(WINDOWS_BUILD_DIR)
+	$(WINDOWS_CC) -c $< -o $@ $(COMMON_CFLAGS) $(WINDOWS_CFLAGS)
 
-	@mkdir -p ~/.local/share/applications
-	@cp cTetris.desktop ~/.local/share/applications/
-	@echo "Installed desktop entry at ~/.local/share/applications"
+$(WINDOWS_RES): resource.rc | $(WINDOWS_BUILD_DIR)
+	$(WINDOWS_RC) $< -O coff -o $@
 
-	@printf "\033[31mNOTE:\033[0m Ensure ~/.local/bin is in your PATH.\n"
-	@echo "Installation successful! Run 'cTetris'."
-
-uninstall:
-	@echo "Uninstalling cTetris..."
-	rm -f ~/.local/bin/cTetris
-	@echo "Uninstalled binary from ~/.local/bin"
-
-	rm -f ~/.local/share/icons/hicolor/scalable/apps/cTetris.svg
-	@echo "Uninstalled icon from ~/.local/share/icons/hicolor/scalable/apps"
-
-	rm -f ~/.local/share/applications/cTetris.desktop
-	@echo "Uninstalled desktop entry from ~/.local/share/applications"
-
-	@echo "Uninstall complete."
+windows: $(WINDOWS_OBJ) $(WINDOWS_RES)
+	$(WINDOWS_CC) $(WINDOWS_OBJ) $(WINDOWS_RES) -o $(WINDOWS_OUT) \
+	$(WINDOWS_LDFLAGS) -Llib_win -lraylib -lwinmm \
+	-Wl,--defsym=stat64i32=_stat64i32 -lgdi32 -lopengl32 \
+	$(if $(DEBUG),,-mwindows)
 
 clean:
-	rm -f cTetris cTetris_debug cTetris.exe resource.o $(OBJ)
+	rm -rf build
+	rm -f cTetris cTetris_debug cTetris.exe cTetris_debug.exe
+	rm -f cTetris-linux-x86_64.tar.gz
 
-.PHONY: help linux windows package install uninstall clean
+.PHONY: help linux windows package clean

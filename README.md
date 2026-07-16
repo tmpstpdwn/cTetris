@@ -73,7 +73,7 @@ cTetris has been tested and verified to work on:
 
 ### Known issues
 
-- **Wayland (DPI scaling)**: On Wayland compositors that don't report DPI scale information to raylib, the window may not scale properly.
+- **Wayland (DPI scaling)**: On Wayland compositors that doesn't report DPI scale factor information to raylib, the window may not scale properly.
 
 ---
 
@@ -114,7 +114,8 @@ Download the precompiled binary `cTetris.exe` from the [Releases](https://github
 
 ### Prerequisites
 
-- **GCC**, **Make**: Native linux compilation.
+- **Make**
+- **GCC**: Native linux compilation.
 - **mingw-w64** toolchain: Cross-compile for windows.
 
 ### Linux
@@ -122,13 +123,21 @@ Download the precompiled binary `cTetris.exe` from the [Releases](https://github
 **Install**
 
 ```bash
-make install
+make linux
+mkdir -p ~/.local/bin ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/applications
+cp cTetris ~/.local/bin/
+cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
+cp cTetris.desktop ~/.local/share/applications/
+```
+```bash
 ```
 
 **Uninstall**
 
 ```bash
-make uninstall
+rm -f ~/.local/bin/cTetris
+rm -f ~/.local/share/icons/hicolor/scalable/apps/cTetris.svg
+rm -f ~/.local/share/applications/cTetris.desktop
 ```
 
 **Note:** Ensure `~/.local/bin` is in your `PATH`.

@@ -26,7 +26,7 @@
 #define WH_TO_MH_PCT 0.8f
 #define SPLIT_AT_PCT 0.5f // Where the sidebar should start %.
 
-#define TEXT_BUFF_LEN 20
+#define TEXT_BUFF_LEN 32
 
 #define NEXT_GRID_SIZE 4
 
@@ -1174,6 +1174,9 @@ static void event_soft_drop_handle(struct CTetrisEvent ev) {
     uint32_t delta = ev.score - score;
     score = ev.score;
 
+    if (score > high_score)
+        renderer_high_score_set(score);
+
     char buf[TEXT_BUFF_LEN];
     snprintf(buf, sizeof(buf), "%u", score);
     ui_text_update(&txt_score, buf, NULL, NULL);
@@ -1195,6 +1198,9 @@ static void event_shift_rotate_handle(struct CTetrisEvent ev) {
 static bool event_hard_drop_handle(struct CTetrisEvent ev) {
     uint32_t delta = ev.score - score;
     score = ev.score;
+
+    if (score > high_score)
+        renderer_high_score_set(score);
 
     char buf[TEXT_BUFF_LEN];
     snprintf(buf, sizeof(buf), "%u", score);
@@ -1219,6 +1225,9 @@ static bool event_line_clear_handle(struct CTetrisEvent ev) {
     score = ev.score;
     level = ev.level;
     lines = ev.lines;
+
+    if (score > high_score)
+        renderer_high_score_set(score);
 
     char buf[TEXT_BUFF_LEN];
     snprintf(buf, sizeof(buf), "%u", score);
