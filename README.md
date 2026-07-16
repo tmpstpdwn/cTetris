@@ -129,8 +129,6 @@ cp cTetris ~/.local/bin/
 cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
 cp cTetris.desktop ~/.local/share/applications/
 ```
-```bash
-```
 
 **Uninstall**
 
