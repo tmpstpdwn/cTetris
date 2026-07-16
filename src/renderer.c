@@ -20,7 +20,7 @@
 // Text literals.
 #define TITLE_ACCENTED "c"
 #define TITLE_DIM "Tetris"
-#define CREDIT_TEXT "cTetris v1.0.0 | Tmpstpdwn"
+#define FOOTER_TEXT "cTetris v1.0.0 | Tmpstpdwn"
 
 // Window height % wrt monitor height.
 #define WH_TO_MH_PCT 0.8f
@@ -1474,7 +1474,7 @@ static void ui_elements_init(void) {
     // Credit
     ui_text_init(&txt_credit, get_font(CREDIT_FONT_SIZE), CREDIT_FONT_SIZE,
                  COL_NEUTRAL);
-    ui_text_update(&txt_credit, CREDIT_TEXT, NULL, NULL);
+    ui_text_update(&txt_credit, FOOTER_TEXT, NULL, NULL);
 
     // Popups
     ui_popup_init(&pp_score, get_font(POPUP_FONT_SIZE), POPUP_FONT_SIZE,

@@ -15,8 +15,8 @@
 
 /* [ DEFINES ] */
 
-#define APP_DIR_NAME "ctetris"
-#define SAVE_FILE_NAME "ctetris.hs"
+#define APP_DIR_NAME "cTetris"
+#define SAVE_FILE_NAME "cTetris.hs"
 
 #define PATH_BUF_SIZE 1024
 
