@@ -1,8 +1,7 @@
 IDI_ICON ICON "cTetris.ico"
-
 1 VERSIONINFO
-FILEVERSION     1,0,0,0
-PRODUCTVERSION  1,0,0,0
+FILEVERSION     1,0,1,0
+PRODUCTVERSION  1,0,1,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -10,15 +9,14 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Tmpstpdwn"
       VALUE "FileDescription", "cTetris"
-      VALUE "FileVersion", "1.0.0"
+      VALUE "FileVersion", "1.0.1"
       VALUE "InternalName", "cTetris"
       VALUE "OriginalFilename", "cTetris.exe"
       VALUE "ProductName", "cTetris"
-      VALUE "ProductVersion", "1.0.0"
+      VALUE "ProductVersion", "1.0.1"
       VALUE "LegalCopyright", "cTetris (c) 2026 Tmpstpdwn"
     END
   END
-
   BLOCK "VarFileInfo"
   BEGIN
     VALUE "Translation", 0x409, 1252

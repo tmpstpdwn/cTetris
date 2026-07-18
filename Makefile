@@ -1,4 +1,4 @@
-VERSION := 1.0.0
+VERSION := 1.0.1
 CC = gcc
 SRC := $(wildcard src/*.c)
 COMMON_CFLAGS := -Iinclude -Wall -Wextra -pedantic -std=c99
@@ -16,11 +16,11 @@ help:
 	@echo "Make what???"
 	@echo ""
 	@echo "make linux                   - Linux release build"
-	@echo "make windows                 - Windows release build"
+	@echo "make windows                 - Windows release build (cross-compile from linux)"
 	@echo "make linux DEBUG=1           - Linux debug build"
-	@echo "make windows DEBUG=1         - Windows debug build"
+	@echo "make windows DEBUG=1         - Windows debug build (cross-compile from linux)"
 	@echo "make package PACKAGE=linux   - Package Linux release build (.tar.gz)"
-	@echo "make package PACKAGE=windows - Package Windows release build (.zip)"
+	@echo "make package PACKAGE=windows - Package Windows release build (.zip) (cross-compile from linux)"
 	@echo "make clean                   - Remove build artifacts"
 
 # Linux

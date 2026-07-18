@@ -1,15 +1,15 @@
 <div align="center">
 
-# cTetris (v1.0.0)
+# cTetris (v1.0.1)
 
 <img src="./cTetris_512x512.png" alt="cTetris Icon" width="256" height="256">
 
-A minimal, simple tetris implementation written in C using raylib.
+A minimal Tetris implementation written in C and Raylib.
 
 <table align="center">
   <tr>
-    <td><img src="cTetris_dark.png" alt="Dark Theme" width="500"></td>
-    <td><img src="cTetris_light.png" alt="Light Theme" width="500"></td>
+    <td><img src="cTetris_dark.png" alt="Dark Theme" width="100%"></td>
+    <td><img src="cTetris_light.png" alt="Light Theme" width="100%"></td>
   </tr>
 </table>
 </div>
@@ -56,11 +56,11 @@ A minimal, simple tetris implementation written in C using raylib.
 | 2 line clear            | 300 × level                         |
 | 3 line clear            | 500 × level                         |
 | 4 line clear            | 800 × level                         |
-| Combo bonus             | 50 per successive line clear        |
+| Combo bonus             | combo * 50 * level                  |
 
 **Level**: Determined by lines cleared. `Level = (lines / 10) + 1`.
 
-**Combo**: Maintained by clearing lines without breaking the chain. Combo bonus `(combo * 50 * level)` adds on top of line-clear bonus.
+**Combo**: Maintained by clearing lines without breaking the chain. Combo bonus adds on top of line-clear bonus.
 
 ---
 
@@ -83,7 +83,7 @@ cTetris has been tested and verified to work on:
 
 **Install**
 
-Download the archive for linux from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page, extract it,
+Download the archive for Linux from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page, extract it,
 enter the directory and do:
 
 ```bash
@@ -105,7 +105,7 @@ rm -f ~/.local/share/applications/cTetris.desktop
 
 ### Windows
 
-Download the zip for windows from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page, extract it, and run `cTetris.exe`. No installation required.
+Download the zip for Windows from the [Releases](https://github.com/tmpstpdwn/cTetris/releases) page, extract it, and run `cTetris.exe`. No installation required.
 
 ---
 
@@ -113,17 +113,26 @@ Download the zip for windows from the [Releases](https://github.com/tmpstpdwn/cT
 
 ### Prerequisites
 
-- **Make**
-- **GCC**: Native linux compilation.
-- **mingw-w64** toolchain: Cross-compile for windows.
+- **GNU Make**
+- **GCC** (Native Linux builds)
+- **X11 development files** (Native Linux builds)
+- **mingw-w64 toolchain** (Cross-compiling Windows builds)
 
 ### Linux
+
+**Build**
+
+```bash
+make linux
+```
 
 **Install**
 
 ```bash
-make linux
-mkdir -p ~/.local/bin ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/applications
+mkdir -p ~/.local/bin \
+         ~/.local/share/icons/hicolor/scalable/apps \
+         ~/.local/share/applications
+
 cp cTetris ~/.local/bin/
 cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
 cp cTetris.desktop ~/.local/share/applications/

@@ -2,7 +2,7 @@
 
 /* [ INCLUDES ] */
 
-#include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 
 #include "raylib.h"
@@ -16,11 +16,10 @@
 /* [ DEFINES ] */
 
 #define FPS 60
-
 // Text literals.
 #define TITLE_ACCENTED "c"
 #define TITLE_DIM "Tetris"
-#define FOOTER_TEXT "cTetris v1.0.0 | Tmpstpdwn"
+#define FOOTER_TEXT "cTetris v1.0.1 | Tmpstpdwn"
 
 // Window height % wrt monitor height.
 #define WH_TO_MH_PCT 0.8f
@@ -235,11 +234,11 @@ static const Color COLORS[SCHEME_COUNT][COL_COUNT] =
                 [COL_SUBTLE] = {44, 44, 46, 255},
                 [COL_NEUTRAL] = {50, 50, 52, 255},
                 [COL_YELLOW] = {242, 201, 76, 255},
-                [COL_ORANGE] = {242, 153, 74, 255},
+                [COL_ORANGE] = {47, 128, 237, 255},
                 [COL_CYAN] = {86, 204, 242, 255},
                 [COL_PURPLE] = {187, 107, 217, 255},
                 [COL_GREEN] = {39, 174, 96, 255},
-                [COL_BLUE] = {47, 128, 237, 255},
+                [COL_BLUE] = {242, 153, 74, 255},
                 [COL_RED] = {235, 87, 87, 255},
             },
         [SCHEME_LIGHT] =
@@ -251,11 +250,11 @@ static const Color COLORS[SCHEME_COUNT][COL_COUNT] =
                 [COL_SUBTLE] = {209, 209, 214, 255},
                 [COL_NEUTRAL] = {218, 218, 222, 255},
                 [COL_YELLOW] = {212, 163, 11, 255},
-                [COL_ORANGE] = {214, 116, 28, 255},
+                [COL_ORANGE] = {29, 97, 194, 255},
                 [COL_CYAN] = {13, 142, 179, 255},
                 [COL_PURPLE] = {140, 63, 189, 255},
                 [COL_GREEN] = {27, 138, 72, 255},
-                [COL_BLUE] = {29, 97, 194, 255},
+                [COL_BLUE] = {214, 116, 28, 255},
                 [COL_RED] = {196, 43, 43, 255},
             },
 };
@@ -1527,25 +1526,58 @@ static void state_init(void) {
 void renderer_init(void) {
     InitWindow(10, 10, "cTetris");
 
-    // Dummy window to figure out dpi scale factor manually.
-    uint64_t dummy_size = 500;
-    SetWindowSize(dummy_size, dummy_size);
-    float dpi_scale_factor = (float)GetRenderWidth() / dummy_size;
+    uint64_t resize_size = 500;
+    SetWindowSize(resize_size, resize_size);
+
+    float dpi_scale_factor = (GetRenderWidth() == GetScreenWidth())
+                                 ? (float)GetRenderWidth() / resize_size
+                                 : 1.0f;
+
+    // On windows and linux-wayland, screen and render dimensions are set
+    // considering the dpi scale factor after the SetWindowSize fn call.
+    // Eg: If I ask a for 500x500 window and if the dpi scale factor is 1.5,
+    // then the actual window created will be 650x650 and both GetRender* and
+    // GetScreen* fns will return 650.
+    // This is used then to compute the `dpi_scale_factor` (window width i got /
+    // window width i asked for).
+    //
+    // On linux-x11, raylib doesn't consider dpi scale factor and sets screen
+    // dimensions to be 500x500 (no scaling) where as render dimensions are only
+    // updated much later (idk why), therefor `dpi_scale_factor` is set to 1 for
+    // X11.
+
+    // This `dpi_scale_factor` is then used to resize the window to the correct
+    // size and scale its contents properly.
+
+    /* NOTE: The above method relies entirely on a raylib behavior that i
+     * happened to observe.
+     * I have never seen this behavior suggested to be used or documented
+     * anywhere.
+     * If this behaviour changes in future raylib releases (current:
+     * raylib 6.0), then the cTetris scaling logic will break.*/
+
+    /* NOTE: Raylib does not expose dpi scale factor when the window is not
+     * flagged FLAG_WINDOW_HIGHDPI.
+     * If the window is flagged so, then raylib internally scales all drawing.
+     * So its an "all in or nothing" scheme.
+     * Therefor in order to scale the game manually i have to rely on this
+     * raylib behavior to compute the dpi scale factor.*/
 
     uint64_t mon = GetCurrentMonitor();
+
     // Make the window size set to a certain % of that of the monitor height.
     // Window is a rectangle.
-    uint64_t window_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
+    uint64_t phy_window_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
 
-    uint64_t logical_window_size = window_size / dpi_scale_factor;
+    uint64_t logical_window_size = phy_window_size / dpi_scale_factor;
 
-    // To get a window of `window_size` i need to ask raylib for a window of
-    // `logical_window_size`.
+    // To get a window of `phy_window_size`, i need to ask raylib for a window
+    // of `logical_window_size`.
     SetWindowSize(logical_window_size, logical_window_size);
 
     // Center the window.
-    SetWindowPosition((GetMonitorWidth(mon) - window_size) / 2,
-                      (GetMonitorHeight(mon) - window_size) / 2);
+    SetWindowPosition((GetMonitorWidth(mon) - phy_window_size) / 2,
+                      (GetMonitorHeight(mon) - phy_window_size) / 2);
 
     InitAudioDevice();
 
@@ -1555,7 +1587,7 @@ void renderer_init(void) {
     UnloadImage(icon);
 
     // Derive layout constraints from the now computed window dimensions.
-    ui_layout_compute(window_size, window_size);
+    ui_layout_compute(phy_window_size, phy_window_size);
 
     SetTargetFPS(FPS);
     SetExitKey(KEY_NULL);
