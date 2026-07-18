@@ -56,7 +56,7 @@ A minimal Tetris implementation written in C and Raylib.
 | 2 line clear            | 300 × level                         |
 | 3 line clear            | 500 × level                         |
 | 4 line clear            | 800 × level                         |
-| Combo bonus             | combo * 50 * level                  |
+| Combo bonus             | combo × 50 × level                  |
 
 **Level**: Determined by lines cleared. `Level = (lines / 10) + 1`.
 
@@ -129,10 +129,7 @@ make linux
 **Install**
 
 ```bash
-mkdir -p ~/.local/bin \
-         ~/.local/share/icons/hicolor/scalable/apps \
-         ~/.local/share/applications
-
+mkdir -p ~/.local/bin ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/applications
 cp cTetris ~/.local/bin/
 cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
 cp cTetris.desktop ~/.local/share/applications/
