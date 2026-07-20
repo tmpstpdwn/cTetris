@@ -73,7 +73,7 @@ cTetris has been tested and verified to work on:
 
 ### Known issues
 
-- **Wayland (DPI scaling)**: On Wayland compositors that doesn't report DPI scale factor information to raylib, the window may not scale properly.
+- **Wayland (DPI scaling)**: On Wayland compositors that don't report DPI scale factor information to raylib, the window may not scale properly.
 
 ---
 
