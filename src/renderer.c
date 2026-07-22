@@ -24,6 +24,8 @@
 // Window height % wrt monitor height.
 #define WH_TO_MH_PCT 0.8f
 #define SPLIT_AT_PCT 0.5f // Where the sidebar should start %.
+// Frame at which the one-shot startup resize is issued (see renderer_input).
+#define STARTUP_NUDGE_FRAME 5
 
 #define TEXT_BUFF_LEN 32
 
@@ -345,6 +347,9 @@ static bool line_move_pending = false;
 // Game stats.
 static uint32_t score, high_score;
 static uint8_t lines, level;
+
+// Intended window size (points), used for the one-shot startup resize.
+static uint64_t startup_window_size = 0;
 
 // Game state stuff.
 static bool paused = false;
@@ -1369,6 +1374,26 @@ static void assets_unload(void) {
     UnloadSound(sfx_clack);
 }
 
+// Reload only the fonts at the current FONT_SM/MD/LG sizes.
+// Used on window resize, where the font pixel sizes change but the audio
+// assets do not need to be touched.
+static void fonts_reload(void) {
+    UnloadFont(font_sm);
+    UnloadFont(font_md);
+    UnloadFont(font_lg);
+
+    font_sm =
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_SM, NULL, 0);
+    font_md =
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_MD, NULL, 0);
+    font_lg =
+        LoadFontFromMemory(".otf", FONT_OTF, FONT_OTF_LEN, FONT_LG, NULL, 0);
+
+    SetTextureFilter(font_sm.texture, TEXTURE_FILTER_POINT);
+    SetTextureFilter(font_md.texture, TEXTURE_FILTER_POINT);
+    SetTextureFilter(font_lg.texture, TEXTURE_FILTER_POINT);
+}
+
 /* UI Core */
 
 static void ui_layout_compute(uint64_t window_w, uint64_t window_h) {
@@ -1524,6 +1549,7 @@ static void state_init(void) {
 
 // Initialize the renderer.
 void renderer_init(void) {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(10, 10, "cTetris");
 
     uint64_t resize_size = 500;
@@ -1568,6 +1594,11 @@ void renderer_init(void) {
     // Make the window size set to a certain % of that of the monitor height.
     // Window is a rectangle.
     uint64_t phy_window_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
+
+    // Remembered for the one-shot startup resize in renderer_input(), which
+    // fires the framebuffer-resize event needed to correct the GL viewport
+    // on HiDPI displays (see the note there).
+    startup_window_size = phy_window_size;
 
     uint64_t logical_window_size = phy_window_size / dpi_scale_factor;
 
@@ -1616,10 +1647,52 @@ void renderer_high_score_set(uint32_t hs) {
 
 uint32_t renderer_high_score_get(void) { return high_score; }
 
+// Recompute the whole UI layout for a new drawable size (in framebuffer
+// pixels). Reloads the fonts at the new sizes and repositions every UI
+// element, while preserving the current game and score state.
+static void renderer_relayout(uint64_t w, uint64_t h) {
+    ui_layout_compute(w, h);
+    fonts_reload();
+    ui_elements_init();
+    ui_elements_cache();
+
+    // ui_elements_init() reset the dynamic text back to defaults, so
+    // re-apply the live values at the new font size / positions.
+    char buf[TEXT_BUFF_LEN];
+    snprintf(buf, sizeof(buf), "%u", score);
+    ui_text_update(&txt_score, buf, NULL, NULL);
+    snprintf(buf, sizeof(buf), "%u", level);
+    ui_text_update(&txt_level, buf, NULL, NULL);
+    snprintf(buf, sizeof(buf), "%u", lines);
+    ui_text_update(&txt_lines, buf, NULL, NULL);
+    renderer_high_score_set(high_score);
+}
+
 // Renderer's input handler.
 bool renderer_input(void) {
     if (WindowShouldClose())
         return false;
+
+    // Right after InitWindow() the GL viewport/projection can be sized wrong
+    // on HiDPI displays, so the UI does not fill the window until the first
+    // real framebuffer-resize event. Once the window has settled (a few
+    // frames in), nudge it to its intended size to trigger that event; the
+    // resize handler below then lays the UI out against the true drawable
+    // size.
+    static int startup_frames = 0;
+    if (startup_frames >= 0) {
+        if (startup_frames == STARTUP_NUDGE_FRAME) {
+            if (startup_window_size > 0)
+                SetWindowSize(startup_window_size, startup_window_size);
+            startup_frames = -1; // Done; stop counting.
+        } else {
+            startup_frames++;
+        }
+    }
+
+    // Recompute the layout to fill the window whenever it is resized.
+    if (IsWindowResized())
+        renderer_relayout(GetRenderWidth(), GetRenderHeight());
 
     if (IsKeyPressed(KEY_P)) {
         paused = !paused;

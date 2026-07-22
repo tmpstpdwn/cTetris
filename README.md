@@ -111,26 +111,45 @@ Download the zip for Windows from the [Releases](https://github.com/tmpstpdwn/cT
 
 ## Building from Source
 
+cTetris uses [raylib](https://www.raylib.com/) as a git submodule, and builds with CMake.
+
 ### Prerequisites
 
-- **GNU Make**
+- **CMake** (3.11+)
 - **GCC** (Native Linux builds)
 - **X11 development files** (Native Linux builds)
 - **mingw-w64 toolchain** (Cross-compiling Windows builds)
+
+### Clone
+
+raylib is vendored as a submodule, so clone recursively:
+
+```bash
+git clone --recurse-submodules https://github.com/tmpstpdwn/cTetris.git
+```
+
+If you already cloned without `--recurse-submodules`, fetch it with:
+
+```bash
+git submodule update --init
+```
 
 ### Linux
 
 **Build**
 
 ```bash
-make linux
+cmake -B build
+cmake --build build -j$(nproc)
 ```
+
+The resulting binary is at `build/cTetris`.
 
 **Install**
 
 ```bash
 mkdir -p ~/.local/bin ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/applications
-cp cTetris ~/.local/bin/
+cp build/cTetris ~/.local/bin/
 cp cTetris.svg ~/.local/share/icons/hicolor/scalable/apps/
 cp cTetris.desktop ~/.local/share/applications/
 ```
@@ -148,7 +167,26 @@ rm -f ~/.local/share/applications/cTetris.desktop
 ### Windows (cross-compile from Linux)
 
 ```bash
-make windows
+cmake -B build-windows -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw64.cmake
+cmake --build build-windows -j$(nproc)
+```
+
+The resulting binary is at `build-windows/cTetris.exe`.
+
+### Debug builds
+
+```bash
+cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-debug -j$(nproc)
+```
+
+### Quick build & run
+
+`run.sh` configures, builds, and launches the game in one step:
+
+```bash
+./run.sh          # Release build
+./run.sh --debug  # Debug build
 ```
 
 ---

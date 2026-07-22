@@ -1,0 +1,5 @@
+[submodule "external/raylib"]
+	path = external/raylib
+	url = https://github.com/raysan5/raylib.git
+	branch = 6.0
+	shallow = true
