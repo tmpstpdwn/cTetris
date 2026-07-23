@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Allow the Pages deploy job to publish, and serialize deploys.
+permissions:
+  contents: read
+
+jobs:
+  # --- Desktop (Linux, native) ---
+  desktop-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake xorg-dev libgl1-mesa-dev
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cTetris-linux
+          path: build/cTetris
+
+  # --- Web (WebAssembly, via Emscripten) ---
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+      - name: Build (WebAssembly)
+        run: |
+          emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web -j"$(nproc)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cTetris-web
+          path: |
+            build-web/cTetris.html
+            build-web/cTetris.js
+            build-web/cTetris.wasm
+
+  # --- Deploy the web build to GitHub Pages (default branch only) ---
+  deploy-pages:
+    needs: web
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cTetris-web
+          path: public
+      - name: Serve the game at the site root
+        run: mv public/cTetris.html public/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4
