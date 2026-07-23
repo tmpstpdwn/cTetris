@@ -31,6 +31,43 @@ jobs:
           name: cTetris-linux
           path: build/cTetris
 
+  # --- Desktop (macOS, native) ---
+  desktop-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cTetris-macos
+          path: build/cTetris
+
+  # --- Desktop (Windows, cross-compiled from Linux with mingw-w64) ---
+  desktop-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install mingw-w64 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake mingw-w64
+      - name: Build (cross-compile for Windows)
+        run: |
+          cmake -B build-windows -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw64.cmake
+          cmake --build build-windows -j"$(nproc)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cTetris-windows
+          path: build-windows/cTetris.exe
+
   # --- Web (WebAssembly, via Emscripten) ---
   web:
     runs-on: ubuntu-latest
