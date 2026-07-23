@@ -6,6 +6,8 @@
 
 A minimal Tetris implementation written in C and Raylib.
 
+[![CI](https://github.com/siddharthroy12/cTetris/actions/workflows/ci.yml/badge.svg)](https://github.com/siddharthroy12/cTetris/actions/workflows/ci.yml)
+
 <table align="center">
   <tr>
     <td><img src="cTetris_dark.png" alt="Dark Theme" width="100%"></td>
