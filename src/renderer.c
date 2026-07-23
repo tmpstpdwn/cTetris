@@ -186,6 +186,10 @@ struct UIShape {
 // Layout constraints derived at runtime wrt the dimensions of the monitor it
 // was spawned on.
 
+// Origins of actual game content.
+// They are 0, 0 unless running on the web.
+static uint64_t CONTENT_X, CONTENT_Y;
+
 // Size of main, next grid cell.
 static uint64_t MAIN_CELL, NEXT_CELL;
 // Padding for main, next grid cell.
@@ -292,6 +296,10 @@ static const char *kb_desc[KB_COUNT] = {
 };
 
 // All dividers.
+#ifdef __EMSCRIPTEN__
+static struct UIDivider div_left;
+static struct UIDivider div_right;
+#endif
 static struct UIDivider div_hdr_bottom;
 static struct UIDivider div_sb_left;
 static struct UIDivider div_sb_1;
@@ -809,7 +817,7 @@ static uint64_t sb_score_cache(uint64_t x, uint64_t y) {
 
     y += txt_hs.bounds.height + SB_SEC_PAD;
 
-    ui_divider_update(&div_sb_1, x, y, W - SB_CON_PAD, y);
+    ui_divider_update(&div_sb_1, x, y, SB_CON_X + SB_CON_W - SB_CON_PAD, y);
 
     return y + 1;
 }
@@ -834,7 +842,7 @@ static uint64_t sb_level_lines_cache(uint64_t x, uint64_t y) {
 
     y += txt_level.bounds.height + SB_SEC_PAD;
 
-    ui_divider_update(&div_sb_2, x, y, W - SB_CON_PAD, y);
+    ui_divider_update(&div_sb_2, x, y, SB_CON_X + SB_CON_W - SB_CON_PAD, y);
 
     return y + 1;
 }
@@ -850,7 +858,7 @@ static uint64_t sb_next_cache(uint64_t x, uint64_t y) {
     NEXT_GRID_CY = y;
 
     y += NEXT_GRID_SIZE * NEXT_CELL + SB_SEC_PAD;
-    ui_divider_update(&div_sb_3, x, y, W - SB_CON_PAD, y);
+    ui_divider_update(&div_sb_3, x, y, SB_CON_X + SB_CON_W - SB_CON_PAD, y);
 
     return y + 1;
 }
@@ -879,6 +887,12 @@ static void credit_cache(void) {
 }
 
 static void ui_elements_cache(void) {
+#ifdef __EMSCRIPTEN__
+    ui_divider_update(&div_left, HDR_CON_X, HDR_CON_Y, HDR_CON_X,
+                      HDR_CON_Y + H);
+    ui_divider_update(&div_right, HDR_CON_X + W, HDR_CON_Y, HDR_CON_X + W,
+                      HDR_CON_Y + H);
+#endif
     ui_divider_update(&div_hdr_bottom, HDR_CON_X, HDR_CON_Y + HDR_CON_H,
                       HDR_CON_X + HDR_CON_W, HDR_CON_Y + HDR_CON_H);
     ui_divider_update(&div_sb_left, SB_CON_X, SB_CON_Y, SB_CON_X,
@@ -1371,25 +1385,25 @@ static void assets_unload(void) {
 
 /* UI Core */
 
-static void ui_layout_compute(uint64_t window_w, uint64_t window_h) {
-    W = window_w;
-    H = window_h;
+static void ui_layout_compute(uint64_t game_w, uint64_t game_h) {
+    W = game_w;
+    H = game_h;
 
     FONT_LG = 0.04f * H;
     FONT_MD = 0.7f * FONT_LG;
     FONT_SM = 0.5f * FONT_LG;
 
-    uint64_t split_x = window_w * SPLIT_AT_PCT;
+    uint64_t split_x = game_w * SPLIT_AT_PCT;
 
-    HDR_CON_X = 0;
-    HDR_CON_Y = 0;
+    HDR_CON_X = CONTENT_X;
+    HDR_CON_Y = CONTENT_Y;
     HDR_CON_W = split_x;
     HDR_CON_H = TITLE_FONT_SIZE * 1.5;
 
-    MAIN_GRID_CON_X = 0;
-    MAIN_GRID_CON_Y = HDR_CON_H;
+    MAIN_GRID_CON_X = CONTENT_X;
+    MAIN_GRID_CON_Y = HDR_CON_Y + HDR_CON_H;
     MAIN_GRID_CON_W = split_x;
-    MAIN_GRID_CON_H = window_h - HDR_CON_H;
+    MAIN_GRID_CON_H = game_h - HDR_CON_H;
 
     uint64_t cell_h = MAIN_GRID_CON_H / (ROWS + 2);
     uint64_t cell_w = MAIN_GRID_CON_W / COLS;
@@ -1406,10 +1420,10 @@ static void ui_layout_compute(uint64_t window_w, uint64_t window_h) {
     MAIN_GRID_CX = MAIN_GRID_CON_X + (MAIN_GRID_CON_W - MAIN_CELL * COLS) / 2;
     MAIN_GRID_CY = MAIN_GRID_CON_Y + (MAIN_GRID_CON_H - MAIN_CELL * ROWS) / 2;
 
-    SB_CON_X = split_x;
-    SB_CON_Y = 0;
-    SB_CON_W = window_w - split_x;
-    SB_CON_H = window_h;
+    SB_CON_X = HDR_CON_X + split_x;
+    SB_CON_Y = CONTENT_Y;
+    SB_CON_W = game_w - split_x;
+    SB_CON_H = game_h;
 
     SB_CON_PAD = 0.04f * SB_CON_W;
 
@@ -1421,6 +1435,10 @@ static void ui_layout_compute(uint64_t window_w, uint64_t window_h) {
 // Initialize all UI elements to a default state.
 static void ui_elements_init(void) {
     // Dividers
+#ifdef __EMSCRIPTEN__
+    ui_divider_init(&div_left, COL_SUBTLE, 1);
+    ui_divider_init(&div_right, COL_SUBTLE, 1);
+#endif
     ui_divider_init(&div_hdr_bottom, COL_SUBTLE, 1);
     ui_divider_init(&div_sb_left, COL_SUBTLE, 1);
     ui_divider_init(&div_sb_1, COL_SUBTLE, 1);
@@ -1522,8 +1540,27 @@ static void state_init(void) {
     game_over_t = 0.0f;
 }
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
+#endif
+
 // Initialize the renderer.
 void renderer_init(void) {
+    uint64_t content_phy_size;
+#ifdef __EMSCRIPTEN__
+    int canvas_w =
+        EM_ASM_INT({ return document.getElementById('canvas').clientWidth; });
+    int canvas_h =
+        EM_ASM_INT({ return document.getElementById('canvas').clientHeight; });
+
+    InitWindow(canvas_w, canvas_h, "cTetris");
+    content_phy_size = (canvas_h < canvas_w) ? canvas_h : canvas_w;
+
+    CONTENT_Y =
+        (content_phy_size == canvas_h) ? 0 : (canvas_h - content_phy_size) / 2;
+    CONTENT_X =
+        (content_phy_size == canvas_w) ? 0 : (canvas_w - content_phy_size) / 2;
+#else
     InitWindow(10, 10, "cTetris");
 
     uint64_t resize_size = 500;
@@ -1533,7 +1570,7 @@ void renderer_init(void) {
                                  ? (float)GetRenderWidth() / resize_size
                                  : 1.0f;
 
-    // On windows and linux-wayland, screen and render dimensions are set
+    // On windows and Wayland, screen and render dimensions are set
     // considering the dpi scale factor after the SetWindowSize fn call.
     // Eg: If I ask a for 500x500 window and if the dpi scale factor is 1.5,
     // then the actual window created will be 650x650 and both GetRender* and
@@ -1541,10 +1578,10 @@ void renderer_init(void) {
     // This is used then to compute the `dpi_scale_factor` (window width i got /
     // window width i asked for).
     //
-    // On linux-x11, raylib doesn't consider dpi scale factor and sets screen
+    // On X11, raylib doesn't consider dpi scale factor and sets screen
     // dimensions to be 500x500 (no scaling) where as render dimensions are only
-    // updated much later (idk why), therefor `dpi_scale_factor` is set to 1 for
-    // X11.
+    // updated much later (idk why), therefore `dpi_scale_factor` is set to 1
+    // for X11.
 
     // This `dpi_scale_factor` is then used to resize the window to the correct
     // size and scale its contents properly.
@@ -1560,34 +1597,34 @@ void renderer_init(void) {
      * flagged FLAG_WINDOW_HIGHDPI.
      * If the window is flagged so, then raylib internally scales all drawing.
      * So its an "all in or nothing" scheme.
-     * Therefor in order to scale the game manually i have to rely on this
+     * Therefore, in order to scale the contents manually i have to rely on this
      * raylib behavior to compute the dpi scale factor.*/
 
     uint64_t mon = GetCurrentMonitor();
 
     // Make the window size set to a certain % of that of the monitor height.
     // Window is a rectangle.
-    uint64_t phy_window_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
+    content_phy_size = GetMonitorHeight(mon) * WH_TO_MH_PCT;
 
-    uint64_t logical_window_size = phy_window_size / dpi_scale_factor;
+    uint64_t content_logical_size = content_phy_size / dpi_scale_factor;
 
-    // To get a window of `phy_window_size`, i need to ask raylib for a window
-    // of `logical_window_size`.
-    SetWindowSize(logical_window_size, logical_window_size);
+    // To get a window of `content_phy_size`, i need to ask raylib for a window
+    // of `content_logical_size`.
+    SetWindowSize(content_logical_size, content_logical_size);
 
     // Center the window.
-    SetWindowPosition((GetMonitorWidth(mon) - phy_window_size) / 2,
-                      (GetMonitorHeight(mon) - phy_window_size) / 2);
-
-    InitAudioDevice();
+    SetWindowPosition((GetMonitorWidth(mon) - content_phy_size) / 2,
+                      (GetMonitorHeight(mon) - content_phy_size) / 2);
 
     // Window decoration icon setup.
     Image icon = LoadImageFromMemory(".png", ICON_PNG, ICON_PNG_LEN);
     SetWindowIcon(icon);
     UnloadImage(icon);
+#endif
+    InitAudioDevice();
 
     // Derive layout constraints from the now computed window dimensions.
-    ui_layout_compute(phy_window_size, phy_window_size);
+    ui_layout_compute(content_phy_size, content_phy_size);
 
     SetTargetFPS(FPS);
     SetExitKey(KEY_NULL);
@@ -1710,7 +1747,8 @@ bool renderer_input(void) {
 }
 
 // Update the game, step the engine forward and deal with events.
-void renderer_update(void) {
+// Returns false when game over.
+bool renderer_update(void) {
     static double last_t = -1.0;
     double now = GetTime();
     if (last_t == -1)
@@ -1718,8 +1756,11 @@ void renderer_update(void) {
     double delta = now - last_t;
     last_t = now;
 
-    if (paused || game_over)
-        return;
+    if (paused)
+        return true;
+
+    if (game_over)
+        return false;
 
     // In case the engine is blocked for playing animations / mutating main ui
     // grid then unblock once they are finished.
@@ -1727,7 +1768,7 @@ void renderer_update(void) {
         if (ui_main_grid_animating ||
             (player_active_shape.anim.type != ANIM_NONE) ||
             (trail_anim.type != ANIM_NONE))
-            return;
+            return true;
 
         if (line_move_pending) {
             for (uint8_t i = 0; i < line_move_count; i++) {
@@ -1747,7 +1788,7 @@ void renderer_update(void) {
                 }
             }
             line_move_pending = false;
-            return;
+            return true;
         }
 
         if (ui_main_grid_write_pending) {
@@ -1766,13 +1807,14 @@ void renderer_update(void) {
     while ((ev = ctetris_event_pop()).type != CTETRIS_EVENT_NONE) {
         if (!event_handle(ev)) {
             block_engine = true;
-            return;
+            return game_over != true;
         }
     }
 
     // The engine is only stepped forward when it isnt blocked and
     // all buffered events are processed.
     ctetris_update(delta);
+    return true;
 }
 
 // Render everything.
@@ -1785,6 +1827,10 @@ void renderer_render(void) {
 
     header_draw(dt);
 
+#ifdef __EMSCRIPTEN__
+    ui_divider_draw(&div_left);
+    ui_divider_draw(&div_right);
+#endif
     ui_divider_draw(&div_hdr_bottom);
     ui_divider_draw(&div_sb_left);
 
