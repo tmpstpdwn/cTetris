@@ -7,6 +7,34 @@
 
 #include "score.h"
 
+#if defined(__EMSCRIPTEN__)
+
+/* [ WEB IMPLEMENTATION ] */
+
+// On the web there is no persistent filesystem, so the high score is stored
+// in the browser's localStorage instead.
+
+#include <emscripten.h>
+
+// clang-format off
+EM_JS(int, js_score_load, (), {
+    var v = localStorage.getItem("cTetris.hs");
+    return v ? (parseInt(v, 10) | 0) : 0;
+});
+
+EM_JS(void, js_score_save, (int score), {
+    localStorage.setItem("cTetris.hs", score);
+});
+// clang-format on
+
+uint32_t score_load(void) { return (uint32_t)js_score_load(); }
+
+void score_save(uint32_t score) { js_score_save((int)score); }
+
+/* [ END ] */
+
+#else
+
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -76,5 +104,7 @@ void score_save(uint32_t score) {
     fwrite(&score, sizeof(score), 1, fp);
     fclose(fp);
 }
+
+#endif // !__EMSCRIPTEN__
 
 /* [ END ] */

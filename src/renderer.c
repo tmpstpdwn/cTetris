@@ -1620,7 +1620,13 @@ void renderer_init(void) {
     // Derive layout constraints from the now computed window dimensions.
     ui_layout_compute(phy_window_size, phy_window_size);
 
+    // On the web the browser drives the frame rate (requestAnimationFrame via
+    // emscripten_set_main_loop), and raylib's frame limiter would call
+    // emscripten_sleep(), which needs ASYNCIFY. Leave the target FPS unset
+    // there so no sleeping is required.
+#if !defined(__EMSCRIPTEN__)
     SetTargetFPS(FPS);
+#endif
     SetExitKey(KEY_NULL);
 
     // Load Font, Sound assets.
@@ -1670,8 +1676,12 @@ static void renderer_relayout(uint64_t w, uint64_t h) {
 
 // Renderer's input handler.
 bool renderer_input(void) {
+    // On the web WindowShouldClose() calls emscripten_sleep() (needs ASYNCIFY)
+    // and the browser owns the window lifetime anyway, so skip it there.
+#if !defined(__EMSCRIPTEN__)
     if (WindowShouldClose())
         return false;
+#endif
 
     // Right after InitWindow() the GL viewport/projection can be sized wrong
     // on HiDPI displays, so the UI does not fill the window until the first

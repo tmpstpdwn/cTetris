@@ -70,6 +70,7 @@ cTetris has been tested and verified to work on:
 
 - **Linux** (X11 and Wayland).
 - **Windows**: 10 and later.
+- **Web** (WebAssembly, via Emscripten) — runs in modern browsers.
 
 ### Known issues
 
@@ -119,6 +120,7 @@ cTetris uses [raylib](https://www.raylib.com/) as a git submodule, and builds wi
 - **GCC** (Native Linux builds)
 - **X11 development files** (Native Linux builds)
 - **mingw-w64 toolchain** (Cross-compiling Windows builds)
+- **Emscripten SDK** (Web builds)
 
 ### Clone
 
@@ -172,6 +174,27 @@ cmake --build build-windows -j$(nproc)
 ```
 
 The resulting binary is at `build-windows/cTetris.exe`.
+
+### Web (WebAssembly, via Emscripten)
+
+Requires the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html)
+(`emcc` on your `PATH`). Configure with `emcmake` so raylib is built for the
+web platform:
+
+```bash
+emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build build-web -j$(nproc)
+```
+
+This produces `build-web/cTetris.html` (plus `.js` and `.wasm`). Browsers
+won't run WebAssembly from `file://`, so serve the directory over HTTP:
+
+```bash
+cd build-web && python3 -m http.server 8000
+```
+
+Then open <http://localhost:8000/cTetris.html>. The high score is saved in the
+browser's `localStorage`.
 
 ### Debug builds
 

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cTetris</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background-color: #0e0e0e;
+        color: #cccccc;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        overflow: hidden;
+      }
+      #wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        gap: 12px;
+      }
+      canvas.emscripten {
+        border: 0;
+        background-color: #0e0e0e;
+        /* Fit the square canvas within the viewport. */
+        max-width: 100vw;
+        max-height: 90vh;
+        outline: none;
+      }
+      #status {
+        font-size: 14px;
+        color: #888888;
+        min-height: 1em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <canvas
+        class="emscripten"
+        id="canvas"
+        oncontextmenu="event.preventDefault()"
+        tabindex="-1"
+      ></canvas>
+      <div id="status">Loading…</div>
+    </div>
+
+    <script>
+      var statusElement = document.getElementById("status");
+      var Module = {
+        canvas: (function () {
+          var canvas = document.getElementById("canvas");
+          // Reload on WebGL context loss instead of silently freezing.
+          canvas.addEventListener(
+            "webglcontextlost",
+            function (e) {
+              alert("WebGL context lost. Reloading.");
+              e.preventDefault();
+            },
+            false
+          );
+          return canvas;
+        })(),
+        print: function (text) {
+          console.log(text);
+        },
+        printErr: function (text) {
+          console.error(text);
+        },
+        setStatus: function (text) {
+          if (statusElement) statusElement.textContent = text;
+        },
+        totalDependencies: 0,
+        onRuntimeInitialized: function () {
+          if (statusElement) statusElement.style.display = "none";
+        },
+      };
+      Module.setStatus("Loading…");
+      window.onerror = function () {
+        Module.setStatus("Something went wrong — see the console.");
+      };
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>
