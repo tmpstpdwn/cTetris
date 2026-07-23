@@ -57,7 +57,8 @@ jobs:
       - name: Install mingw-w64 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake mingw-w64
+          sudo apt-get install -y --no-install-recommends \
+            cmake mingw-w64 g++-mingw-w64-x86-64
       - name: Build (cross-compile for Windows)
         run: |
           cmake -B build-windows -DCMAKE_BUILD_TYPE=Release \
