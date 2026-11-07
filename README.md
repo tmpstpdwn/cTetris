@@ -13,8 +13,6 @@ A minimal Tetris implementation written in C and Raylib.
   </tr>
 </table>
 
-<video src="https://github.com/user-attachments/assets/9b0f91ce-74fc-4242-97a2-b1c173736a4b" controls></video>
-
 </div>
 
 ## Game Mechanics
@@ -118,6 +116,7 @@ Download the zip for Windows from the [Releases](https://github.com/tmpstpdwn/cT
 - Meson
 - Ninja
 - CMake : used to build Raylib.
+          Raylib is provided as a git submodule and pinned to v6.0 .
           See Raylib [wiki](https://github.com/raysan5/raylib/wiki) for Raylib build dependencies.
 - Emscripten SDK : only required for the WebAssembly build.
 
